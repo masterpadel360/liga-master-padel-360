@@ -9,7 +9,8 @@
  * IMPORTANTE: reemplazá la constante API_URL de acá abajo por la URL de
  * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
-var API_URL = 'PEGAR_AQUI_LA_URL_DEL_DEPLOYMENT/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
+
 
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
