@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>MASTER PÁDEL 360</title>
+<meta name="description" content="Liga MASTER PÁDEL 360 — Torneo Apertura 2026. Posiciones, fixture y resultados en vivo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header class="topbar" id="topbar">
+    <img class="logo" src="assets/logo.png" alt="MASTER PÁDEL 360" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'logo-fallback',textContent:'MASTER PÁDEL 360'}))">
+  </header>
+
+  <main class="body" id="body">
+
+    <!-- ============ INICIO ============ -->
+    <section class="screen" id="screen-inicio">
+
+      <div class="hero">
+        <span class="hero-eyebrow">Torneo Apertura 2026</span>
+        <h1 class="hero-title">MASTER<br>PÁDEL 360</h1>
+        <span class="hero-status" id="hero-status" hidden></span>
+        <button class="btn-cta" data-go="fixture">Ver fixture</button>
+      </div>
+
+      <div class="intro">
+        <h2>Bienvenidos a Master Pádel 360</h2>
+        <p>Competí. Sumá puntos. Llegá a los playoffs.</p>
+      </div>
+
+      <div class="hero-photos" id="hero-photos" hidden></div>
+
+      <nav class="quick-grid" aria-label="Accesos rápidos">
+        <button class="quick-card" data-go="posiciones"><span class="qc-ic">●</span>Posiciones</button>
+        <button class="quick-card" data-go="fixture"><span class="qc-ic">●</span>Fixture</button>
+        <button class="quick-card" data-go="resultados"><span class="qc-ic">●</span>Resultados</button>
+        <button class="quick-card" data-go="playoffs"><span class="qc-ic">●</span>Playoffs</button>
+      </nav>
+
+      <div id="novedades"></div>
+
+      <div class="sponsor-strip" id="ini-sponsors" hidden>
+        <span class="sponsor-strip-lbl">Con el apoyo de</span>
+        <div class="sponsor-row" id="ini-sponsors-logos"></div>
+      </div>
+    </section>
+
+    <!-- ============ POSICIONES ============ -->
+    <section class="screen" id="screen-posiciones" hidden>
+      <div class="screen-head">
+        <h1>Posiciones</h1>
+        <p>Tabla en vivo — fase de grupos</p>
+      </div>
+      <div class="cat-chips" id="posCats" role="tablist"></div>
+      <div class="standings-head">
+        <span class="sh-rank"></span><span class="sh-pareja">Pareja</span>
+        <span class="sh-num">PJ</span><span class="sh-num">PG</span><span class="sh-num">PP</span>
+        <span class="sh-pts">Pts</span>
+      </div>
+      <div id="posRows"><div class="state-loading">Cargando…</div></div>
+      <p class="hint-line">Tocá una pareja para ver sets y games a favor / en contra</p>
+    </section>
+
+    <!-- ============ FIXTURE ============ -->
+    <section class="screen" id="screen-fixture" hidden>
+      <div class="screen-head">
+        <h1>Fixture</h1>
+        <p>Todos contra todos</p>
+      </div>
+      <div class="cat-chips" id="fixCats" role="tablist"></div>
+      <div class="fecha-chips" id="fixFechas"></div>
+      <div id="fixMatches"><div class="state-loading">Cargando…</div></div>
+    </section>
+
+    <!-- ============ RESULTADOS ============ -->
+    <section class="screen" id="screen-resultados" hidden>
+      <div class="screen-head">
+        <h1>Resultados</h1>
+        <p>Partidos ya jugados</p>
+      </div>
+      <div class="cat-chips" id="resCats" role="tablist"></div>
+      <div id="resMatches"><div class="state-loading">Cargando…</div></div>
+    </section>
+
+    <!-- ============ MÁS ============ -->
+    <section class="screen" id="screen-mas" hidden>
+      <div class="screen-head">
+        <h1>Más</h1>
+        <p>Toda la info de la liga</p>
+      </div>
+      <div class="more-list">
+        <button class="more-item" data-go="playoffs"><span class="mi-ic">🏆</span><span class="mi-tx"><b>Playoffs</b><span>Fase final del torneo</span></span><span class="mi-chev">›</span></button>
+        <button class="more-item" data-go="fotos"><span class="mi-ic">📷</span><span class="mi-tx"><b>Fotos</b><span>Galería de la liga</span></span><span class="mi-chev">›</span></button>
+        <button class="more-item" data-go="reglamento"><span class="mi-ic">📋</span><span class="mi-tx"><b>Reglamento y premios</b><span>Formato, categorías y puntos</span></span><span class="mi-chev">›</span></button>
+        <button class="more-item" data-go="sponsors"><span class="mi-ic">🤝</span><span class="mi-tx"><b>Sponsors</b><span>Quiénes apoyan la liga</span></span><span class="mi-chev">›</span></button>
+      </div>
+    </section>
+
+    <!-- ============ PLAYOFFS ============ -->
+    <section class="screen" id="screen-playoffs" hidden>
+      <button class="back-row" data-go="mas">‹ Más</button>
+      <div class="screen-head">
+        <h1>Playoffs</h1>
+        <p>Fase final del torneo</p>
+      </div>
+      <div class="bracket-card">
+        <svg viewBox="0 0 260 150" role="img" aria-label="Llave de playoffs a seis parejas, todavía bloqueada">
+          <g stroke="var(--border)" stroke-width="1.5" fill="none">
+            <line x1="16" y1="18" x2="60" y2="18"/><line x1="16" y1="42" x2="60" y2="42"/>
+            <line x1="60" y1="18" x2="60" y2="30"/><line x1="60" y1="42" x2="60" y2="30"/><line x1="60" y1="30" x2="104" y2="30"/>
+            <line x1="16" y1="108" x2="60" y2="108"/><line x1="16" y1="132" x2="60" y2="132"/>
+            <line x1="60" y1="108" x2="60" y2="120"/><line x1="60" y1="132" x2="60" y2="120"/><line x1="60" y1="120" x2="104" y2="120"/>
+            <line x1="104" y1="30" x2="104" y2="75"/><line x1="104" y1="120" x2="104" y2="75"/><line x1="104" y1="75" x2="150" y2="75"/>
+          </g>
+          <g fill="var(--text-faint)" font-family="Barlow" font-weight="600" font-size="7" letter-spacing=".04em">
+            <text x="16" y="12">3° / 6° · 4° / 5°</text>
+            <text x="62" y="27">SEMIFINALES</text>
+            <text x="152" y="78">FINAL</text>
+          </g>
+          <circle cx="162" cy="75" r="13" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+          <text x="162" y="79" text-anchor="middle" font-size="11">🔒</text>
+        </svg>
+        <span class="soon-pill" id="playoffs-pill">Próximamente</span>
+        <p class="bracket-caption" id="playoffs-mensaje">Se habilita cuando termine la fase de grupos de cada categoría.</p>
+      </div>
+      <div class="reg-block">
+        <b>Formato acordado (categorías de ~9/10 parejas)</b>
+        <p>Clasifican 6. 1° y 2° pasan directo a semifinal. 3° vs 6° y 4° vs 5° definen a los otros dos semifinalistas. Todos los cruces son a partido único.</p>
+      </div>
+    </section>
+
+    <!-- ============ FOTOS ============ -->
+    <section class="screen" id="screen-fotos" hidden>
+      <button class="back-row" data-go="mas">‹ Más</button>
+      <div class="screen-head">
+        <h1>Fotos</h1>
+        <p>Galería de la liga</p>
+      </div>
+      <div class="filter-chips" id="fotosFiltros"></div>
+      <div class="photo-grid" id="fotosGrid"><div class="state-loading">Cargando…</div></div>
+    </section>
+
+    <!-- ============ REGLAMENTO ============ -->
+    <section class="screen" id="screen-reglamento" hidden>
+      <button class="back-row" data-go="mas">‹ Más</button>
+      <div class="screen-head">
+        <h1>Reglamento</h1>
+        <p>Formato de la liga y premios</p>
+      </div>
+      <div id="reg-bloques"><div class="state-loading">Cargando…</div></div>
+    </section>
+
+    <!-- ============ SPONSORS ============ -->
+    <section class="screen" id="screen-sponsors" hidden>
+      <button class="back-row" data-go="mas">‹ Más</button>
+      <div class="screen-head">
+        <h1>Sponsors</h1>
+        <p>Quiénes apoyan la liga</p>
+      </div>
+      <div class="sponsor-feature" id="sponsor-destacado" hidden>
+        <div class="sponsor-feature-logo" id="sponsor-destacado-logo">LOGO</div>
+        <div><b id="sponsor-destacado-nombre"></b><span>Auspicia la temporada</span></div>
+      </div>
+      <div class="sponsor-row wrap" id="sponsor-resto"></div>
+      <p class="state-empty" id="sponsors-empty" hidden>Todavía no hay sponsors cargados.</p>
+    </section>
+
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <button class="nav-item" data-nav="inicio" data-go="inicio"><span class="ni-ic">⌂</span><span class="ni-lb">Inicio</span></button>
+    <button class="nav-item" data-nav="posiciones" data-go="posiciones"><span class="ni-ic">▤</span><span class="ni-lb">Posic.</span></button>
+    <button class="nav-item" data-nav="fixture" data-go="fixture"><span class="ni-ic">▦</span><span class="ni-lb">Fixture</span></button>
+    <button class="nav-item" data-nav="resultados" data-go="resultados"><span class="ni-ic">✓</span><span class="ni-lb">Result.</span></button>
+    <button class="nav-item" data-nav="mas" data-go="mas"><span class="ni-ic">•••</span><span class="ni-lb">Más</span></button>
+  </nav>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
