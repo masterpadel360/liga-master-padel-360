@@ -1,15 +1,15 @@
 /**
  * MASTER PÁDEL 360 — app.js
  * =======================================================================
- * Reemplaza a google.script.run (que solo existe dentro de un HTML
- * servido por Apps Script) por un cliente HTTP normal contra la misma
- * Web App de Apps Script, ahora llamada con "?accion=...".
+ * Cliente HTTP contra la Web App de Apps Script (fetch con respaldo
+ * JSONP). Esta parte NO cambió respecto de la versión anterior que ya
+ * comprobaste funcionando: mismo API_URL, mismo apiFetch, mismos nombres
+ * de acción, mismo caché de 45s del lado del servidor.
  *
  * IMPORTANTE: reemplazá la constante API_URL de acá abajo por la URL de
- * TU deployment de Apps Script (ver instrucciones de instalación). Sin
- * eso, la página no tiene de dónde traer datos.
+ * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
-var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
+var API_URL = 'PEGAR_AQUI_LA_URL_DEL_DEPLOYMENT/exec';
 
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
@@ -78,9 +78,14 @@ var fechaPorCategoria = {};
 var fotosCache_ = [];
 var filtroFotoActual = 'Todas';
 
+// "premios", "sobre-liga" y "contacto" son pantallas nuevas de este
+// rediseño; "sobre-liga" y "contacto" no piden nada al backend (son
+// contenido fijo editable directo en index.html), por eso no tienen
+// caso en cargarPantalla_ más abajo.
 var NAV_GRUPO = {
   inicio: 'inicio', posiciones: 'posiciones', fixture: 'fixture', resultados: 'resultados',
-  mas: 'mas', playoffs: 'mas', fotos: 'mas', reglamento: 'mas', sponsors: 'mas',
+  mas: 'mas', playoffs: 'mas', fotos: 'mas', reglamento: 'mas', premios: 'mas',
+  sponsors: 'mas', 'sobre-liga': 'mas', contacto: 'mas',
 };
 
 function esc_(s) {
@@ -148,9 +153,10 @@ function cargarPantalla_(pantalla) {
   if (pantalla === 'posiciones') cargarPosiciones_();
   else if (pantalla === 'fixture') cargarFixture_();
   else if (pantalla === 'resultados') cargarResultados_();
-  else if (pantalla === 'playoffs' || pantalla === 'reglamento') cargarMas_();
+  else if (pantalla === 'playoffs' || pantalla === 'reglamento' || pantalla === 'premios') cargarMas_();
   else if (pantalla === 'fotos') cargarFotos_();
   else if (pantalla === 'sponsors') cargarSponsors_();
+  // 'sobre-liga' y 'contacto' son contenido fijo del HTML: no piden nada.
 }
 
 // ============================================================
@@ -190,26 +196,38 @@ function renderInicio_(datos) {
   var elSp = document.getElementById('ini-sponsors');
   if (datos.sponsors.length) {
     elSp.hidden = false;
-    document.getElementById('ini-sponsors-logos').innerHTML = datos.sponsors.map(function (s) {
-      return '<div class="sponsor-chip">' + esc_(s.nombre) + '</div>';
-    }).join('');
+    document.getElementById('ini-sponsors-logos').innerHTML = datos.sponsors.map(sponsorChipHtml_).join('');
   } else {
     elSp.hidden = true;
   }
 }
 
-// Fotos reales de la liga en Inicio: se piden aparte (no rompe el
-// bootstrap si la galería tarda o falla) y se muestran las primeras 2.
+// Un sponsor-chip muestra el logo real (logoUrl de la hoja SPONSORS) si
+// existe; si esa fila todavía no tiene logo cargado, muestra el nombre
+// como texto -- nunca queda un chip vacío ni una imagen rota.
+function sponsorChipHtml_(s) {
+  if (s.logoUrl) {
+    return '<div class="sponsor-chip has-img" style="background-image:url(\'' + esc_(s.logoUrl) + '\')" title="' + esc_(s.nombre) + '"></div>';
+  }
+  return '<div class="sponsor-chip">' + esc_(s.nombre) + '</div>';
+}
+
+// Banner "Más que una liga": usa la primera foto real de GALERIA como
+// fondo. Se pide aparte del bootstrap (no bloquea ni rompe Inicio si la
+// galería tarda o todavía no tiene fotos cargadas).
 function cargarFotosInicio_() {
   apiFetch('galeria').then(function (fotos) {
-    var el = document.getElementById('hero-photos');
-    var muestra = fotos.slice(0, 2);
-    if (!muestra.length) return;
-    el.hidden = false;
-    el.className = 'hero-photos' + (muestra.length === 1 ? ' single' : '');
-    el.innerHTML = muestra.map(function (f) {
-      return '<div class="hero-photo"><img loading="lazy" src="' + esc_(f.url) + '" alt="' + esc_(f.titulo || 'Master Pádel 360') + '" onerror="this.closest(\'.hero-photo\').remove()"></div>';
-    }).join('');
+    if (!fotos.length) return;
+    var foto = fotos[0];
+    var banner = document.getElementById('community-banner');
+    var bg = document.getElementById('community-bg');
+    var img = new Image();
+    img.onload = function () {
+      bg.style.backgroundImage = "url('" + foto.url + "')";
+      banner.hidden = false;
+    };
+    img.onerror = function () { /* la foto no cargó: el banner sigue oculto */ };
+    img.src = foto.url;
   }).catch(function () { /* sin fotos no rompe Inicio */ });
 }
 
@@ -289,6 +307,9 @@ function renderFixture_(datos) {
     return '<button class="chip' + (f.numero === sel ? ' active' : '') + '" data-fecha="' + f.numero + '">Fecha ' + f.numero + '</button>';
   }).join('');
   var fecha = datos.fechas.filter(function (f) { return f.numero === sel; })[0] || datos.fechas[0];
+  // Nota: acá NO se muestran horario ni cancha porque PARTIDOS no trae
+  // esos datos hoy. Apenas existan en la planilla, se agregan sin tocar
+  // el resto de la tarjeta.
   var html = fecha.partidos.map(function (p) {
     if (p.estado === 'JUGADO') return '<div class="match-card">' + renderScoreboard_(p.parejaA, p.parejaB, p.sets, p.ganador) + '</div>';
     return '<div class="match-card"><span class="match-pending-tag">Pendiente</span>' +
@@ -344,7 +365,8 @@ function renderResultados_(lista) {
 }
 
 // ============================================================
-// Más: Playoffs + Reglamento
+// Más: Playoffs + Reglamento + Premios
+// (una sola llamada a mp360GetMas() alimenta las tres pantallas)
 // ============================================================
 function cargarMas_() {
   if (cache_.mas) { renderMas_(cache_.mas); return; }
@@ -353,17 +375,21 @@ function cargarMas_() {
     renderMas_(datos);
   }).catch(function () {
     document.getElementById('reg-bloques').innerHTML = '<p class="state-empty">No se pudo cargar el reglamento.</p>';
+    document.getElementById('premios-bloques').innerHTML = '<p class="state-empty">No se pudieron cargar los premios.</p>';
   });
 }
 function renderMas_(datos) {
   document.getElementById('playoffs-mensaje').textContent = datos.playoffsMensaje;
-  var bloques = datos.reglamento.map(function (b) {
+
+  var reg = datos.reglamento.map(function (b) {
     return '<div class="reg-block"><b>' + esc_(b.titulo) + '</b><p>' + esc_(b.texto) + '</p></div>';
-  });
-  datos.premios.forEach(function (p) {
-    bloques.push('<div class="reg-block"><b>🏅 ' + esc_(p.titulo) + '</b><p>' + esc_(p.texto) + '</p></div>');
-  });
-  document.getElementById('reg-bloques').innerHTML = bloques.join('') || '<p class="state-empty">Todavía no se cargó el reglamento.</p>';
+  }).join('');
+  document.getElementById('reg-bloques').innerHTML = reg || '<p class="state-empty">Todavía no se cargó el reglamento.</p>';
+
+  var premios = datos.premios.map(function (p) {
+    return '<div class="reg-block"><b>' + esc_(p.titulo) + '</b><p>' + esc_(p.texto) + '</p></div>';
+  }).join('');
+  document.getElementById('premios-bloques').innerHTML = premios || '<p class="state-empty">Todavía no se cargaron los premios.</p>';
 }
 
 // ============================================================
@@ -431,9 +457,10 @@ function renderSponsors_(datos) {
     elDest.hidden = true;
   }
   document.getElementById('sponsor-resto').innerHTML = datos.resto.map(function (s) {
-    var tag = s.link ? 'a href="' + esc_(s.link) + '" target="_blank" rel="noopener"' : 'div';
-    var cierre = s.link ? 'a' : 'div';
-    return '<' + tag + ' class="sponsor-chip">' + esc_(s.nombre) + '</' + cierre + '>';
+    var chip = sponsorChipHtml_(s);
+    if (!s.link) return chip;
+    // Envolvemos el mismo chip en un link cuando la fila tiene LINK cargado.
+    return chip.replace('<div class="sponsor-chip', '<a href="' + esc_(s.link) + '" target="_blank" rel="noopener" class="sponsor-chip').replace(/<\/div>$/, '</a>');
   }).join('');
   document.getElementById('sponsors-empty').hidden = !!(datos.destacado || datos.resto.length);
 }
