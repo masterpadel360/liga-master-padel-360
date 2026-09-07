@@ -63,12 +63,26 @@
 
       <div class="screen-pad">
         <section class="cat-select-block" id="cat-select-block">
-          <h2 class="cat-select-title">Seleccioná tu categoría</h2>
-          <p class="cat-select-sub" id="cat-select-sub">Elegí tu categoría para personalizar toda la experiencia.</p>
-          <div class="cat-chips" id="inicioCats"></div>
+          <button class="cat-select-cta" id="cat-select-cta">
+            <span class="cat-select-cta-tx">
+              <span class="cat-select-title">Seleccioná tu categoría</span>
+              <span class="cat-select-sub">Elegí tu categoría para personalizar toda la experiencia.</span>
+            </span>
+            <span class="cat-select-cta-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="cat-select-expanded" id="cat-select-expanded" hidden>
+            <h2 class="cat-select-title">Seleccioná tu categoría</h2>
+            <p class="cat-select-sub">Elegí tu categoría para personalizar toda la experiencia.</p>
+            <div class="cat-chips" id="inicioCats"></div>
+          </div>
+          <button class="cat-active-row" id="cat-active-row" hidden>
+            <span class="cat-active-label">Categoría activa</span>
+            <span class="cat-active-value" id="cat-active-value"></span>
+            <span class="cat-active-chevron" aria-hidden="true">▾</span>
+          </button>
         </section>
 
-        <nav class="quick-grid" aria-label="Accesos rápidos">
+        <nav class="quick-grid" id="inicio-quick-grid" aria-label="Accesos rápidos" hidden>
           <button class="quick-card" data-go="posiciones">
             <span class="qc-ic"><svg class="ic"><use href="#icon-chart"/></svg></span>
             <span class="qc-tx"><b>Posiciones</b><span>Ver tabla</span></span>

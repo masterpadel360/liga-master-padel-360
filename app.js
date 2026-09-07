@@ -79,6 +79,20 @@ var fechaPorCategoria = {};
 var fotosCache_ = [];
 var filtroFotoActual = 'Todas';
 
+// ============================================================
+// Categoría guardada del jugador (localStorage)
+// ============================================================
+var LS_CATEGORIA_ = 'mp360_categoria';
+function guardarCategoriaElegida_(cat) {
+  try { localStorage.setItem(LS_CATEGORIA_, cat); } catch (e) { /* storage no disponible: no rompe la app */ }
+}
+function borrarCategoriaGuardada_() {
+  try { localStorage.removeItem(LS_CATEGORIA_); } catch (e) { /* nada que borrar si no hay storage */ }
+}
+function leerCategoriaGuardada_() {
+  try { return localStorage.getItem(LS_CATEGORIA_); } catch (e) { return null; }
+}
+
 // "premios", "sobre-liga" y "contacto" son pantallas nuevas de este
 // rediseño; "sobre-liga" y "contacto" no piden nada al backend (son
 // contenido fijo editable directo en index.html), por eso no tienen
@@ -151,6 +165,12 @@ document.addEventListener('click', function (e) {
 });
 
 function cargarPantalla_(pantalla) {
+  // Sin categoría elegida todavía no hay nada que filtrar en estas tres
+  // pantallas: mandamos al jugador de vuelta a Inicio a elegirla.
+  if (!categoriaActual && (pantalla === 'posiciones' || pantalla === 'fixture' || pantalla === 'resultados')) {
+    irA('inicio');
+    return;
+  }
   if (pantalla === 'posiciones') cargarPosiciones_();
   else if (pantalla === 'fixture') cargarFixture_();
   else if (pantalla === 'resultados') cargarResultados_();
@@ -175,15 +195,72 @@ document.addEventListener('click', function (e) {
   document.querySelectorAll('.cat-chips .chip').forEach(function (c) {
     c.classList.toggle('active', c.getAttribute('data-cat') === categoriaActual);
   });
+  guardarCategoriaElegida_(categoriaActual);
+  // Elegido el chip, el selector se cierra/compacta (patrón tap-para-
+  // desplegar: la próxima vez que haga falta elegir, arranca cerrado).
+  actualizarSelectorInicio_(false);
   cargarPantalla_(pantallaActual);
+});
+
+// ============================================================
+// Selector de categoría de Inicio (independiente del resto del
+// contenido de Inicio: novedades/sponsors/galería rotos NUNCA deben
+// impedir que esto se pinte).
+//
+// Patrón "tap para desplegar": sin categoría elegida, Inicio arranca
+// mostrando solo el CTA "Seleccioná tu categoría" -- los chips de
+// CATEGORIAS NO están desplegados todavía. Recién al tocar el CTA (o,
+// con categoría ya elegida, la fila compacta) se despliegan.
+// ============================================================
+var selectorInicioAbierto_ = false;
+
+// abrir: true/false para forzar el estado de los chips; se omite para
+// dejar el estado tal cual está (usado al repintar por otros motivos,
+// como al cambiar de pantalla).
+function actualizarSelectorInicio_(abrir) {
+  var cta = document.getElementById('cat-select-cta');
+  var expandido = document.getElementById('cat-select-expanded');
+  var bloque = document.getElementById('cat-select-block');
+  var filaActiva = document.getElementById('cat-active-row');
+  var valorActivo = document.getElementById('cat-active-value');
+  var accesos = document.getElementById('inicio-quick-grid');
+
+  if (typeof abrir === 'boolean') selectorInicioAbierto_ = abrir;
+
+  pintarChipsCategoria_('inicioCats');
+
+  var hayCategoria = !!categoriaActual;
+  var mostrarChips = selectorInicioAbierto_;
+
+  cta.hidden = hayCategoria || mostrarChips;
+  expandido.hidden = !mostrarChips;
+  filaActiva.hidden = !hayCategoria || mostrarChips;
+  bloque.classList.toggle('is-compact', hayCategoria && !mostrarChips);
+  bloque.classList.toggle('needs-choice', !hayCategoria);
+  valorActivo.textContent = hayCategoria ? categoriaActual : '';
+
+  // Antes de elegir categoría, Posiciones/Fixture/Resultados/Playoffs no
+  // se muestran: el objetivo de Inicio en ese estado es que el jugador
+  // elija su categoría primero.
+  accesos.hidden = !hayCategoria;
+}
+document.getElementById('cat-select-cta').addEventListener('click', function () {
+  actualizarSelectorInicio_(true);
+});
+document.getElementById('cat-active-row').addEventListener('click', function () {
+  actualizarSelectorInicio_(true);
 });
 
 // ============================================================
 // Inicio
 // ============================================================
+// Robusto frente a datos opcionales rotos (null/undefined/vacíos/
+// elementos null/objetos incompletos): un problema acá jamás debe
+// afectar el selector de categoría, que se pinta aparte.
 function renderInicio_(datos) {
-  var novedades = datos.novedades || [];
-  var sponsors = datos.sponsors || [];
+  datos = datos || {};
+  var novedades = (Array.isArray(datos.novedades) ? datos.novedades : []).filter(Boolean);
+  var sponsors = (Array.isArray(datos.sponsors) ? datos.sponsors : []).filter(Boolean);
 
   var elStatus = document.getElementById('hero-status');
   if (datos.banner && datos.banner.titulo) {
@@ -210,6 +287,7 @@ function renderInicio_(datos) {
 // existe; si esa fila todavía no tiene logo cargado, muestra el nombre
 // como texto -- nunca queda un chip vacío ni una imagen rota.
 function sponsorChipHtml_(s) {
+  s = s || {};
   if (s.logoUrl) {
     return '<div class="sponsor-chip has-img" style="background-image:url(\'' + esc_(s.logoUrl) + '\')" title="' + esc_(s.nombre) + '"></div>';
   }
@@ -221,8 +299,8 @@ function sponsorChipHtml_(s) {
 // galería tarda o todavía no tiene fotos cargadas).
 function cargarFotosInicio_() {
   apiFetch('galeria').then(function (fotos) {
-    if (!fotos.length) return;
-    var foto = fotos[0];
+    if (!Array.isArray(fotos) || !fotos.length) return;
+    var foto = fotos[0] || {};
     var banner = document.getElementById('community-banner');
     var bg = document.getElementById('community-bg');
     var img = new Image();
@@ -474,8 +552,23 @@ function renderSponsors_(datos) {
 // ============================================================
 window.addEventListener('DOMContentLoaded', function () {
   apiFetch('bootstrap').then(function (boot) {
-  CATEGORIAS = boot.categorias || [];
-  categoriaActual = CATEGORIAS[0] || null;
+  boot = boot || {};
+  CATEGORIAS = Array.isArray(boot.categorias) ? boot.categorias.filter(Boolean) : [];
+
+  // Categoría guardada de una visita anterior: solo se respeta si sigue
+  // existiendo en CATEGORIAS (la fuente de verdad real del backend).
+  var guardada = leerCategoriaGuardada_();
+  if (guardada && CATEGORIAS.indexOf(guardada) !== -1) {
+    categoriaActual = guardada;
+  } else {
+    if (guardada) borrarCategoriaGuardada_();
+    categoriaActual = null;
+  }
+
+  // El selector de categoría se pinta siempre, sin importar si el resto
+  // del contenido de Inicio (novedades, sponsors, banner) falla.
+  actualizarSelectorInicio_();
+
   try {
     renderInicio_(boot.inicio || {});
   } catch (e) {
