@@ -68,56 +68,69 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .screen-head h1{font-size:1.55rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
 .screen-head p{margin:2px 0 0;color:var(--text-dim);font-size:.85rem}
 
-/* ---------- hero fotográfico (Inicio) ----------
-   hero-liga.png es un cuadrado (2048x2048) con casi el 90% superior en
-   negro/gris muy oscuro (cancha) y recién en el último tramo aparecen
-   los jugadores en primer plano más iluminados. Por eso el contenedor
-   se recorta en formato retrato (más alto que ancho): con cover, ese
-   ratio hace que el recorte sea horizontal (bordes laterales, que ya
-   son negros) y se preserva TODA la altura real de la foto. */
-.hero{
-  position:relative;overflow:hidden;
-  aspect-ratio:3/4;max-height:640px;
-  background:var(--bg);
-}
-.hero-bg{
-  position:absolute;inset:0;
-  background:url('hero-liga.png') center top/cover no-repeat, var(--bg);
-}
-/* Velo: una viñeta suave enmarca la franja negra donde va la marca (le
-   da algo de aire "cinematográfico" y contraste extra) y se disuelve
-   por completo sobre la cancha y los jugadores -- la foto se ve limpia
-   ahí -- hasta fundirse con el fondo de la página justo en el borde
-   inferior, para que el salto hacia el contenido de abajo no se sienta
-   como una imagen pegada encima de la web. */
-.hero-scrim{
-  position:absolute;inset:0;
-  background:
-    radial-gradient(120% 60% at 50% 4%, rgba(10,10,12,.5) 0%, rgba(10,10,12,0) 72%),
-    linear-gradient(180deg, rgba(10,10,12,0) 72%, rgba(10,10,12,.72) 91%, var(--bg) 100%);
-}
-.hero-inner{
-  position:relative;z-index:1;height:100%;width:100%;
-  display:flex;flex-direction:column;align-items:center;text-align:center;
-  padding:clamp(14px,4vw,22px) 20px 0;
+/* ---------- hero (Inicio) ----------
+   Dos bloques apilados, no uno solo:
+   1) .hero-top: negro sólido y limpio, sin foto. Acá vive toda la
+      marca (logo grande, título, tagline, fecha) bien arriba y
+      separada de la cancha -- el logo nunca queda "metido" dentro
+      de la foto.
+   2) .hero-photo: la foto (hero-liga.png) recién empieza después,
+      un poco más abajo. hero-liga.png es un cuadrado (2048x2048)
+      con ~55% superior en negro puro y el resto la cancha con los
+      jugadores; acá se muestra solo el tramo inferior de esa foto
+      (ver comentario en .hero-photo), así que lo primero que se ve
+      todavía es negro -- funde sin costura con .hero-top de arriba,
+      porque los dos son el mismo negro -- y la cancha aparece recién
+      al hacer scroll, como una segunda escena, no pegada debajo del
+      logo.
+   ---------------------------------------------------------------- */
+.hero{position:relative;background:var(--bg)}
+
+.hero-top{
+  position:relative;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  min-height:82vh;max-height:760px;
+  padding:clamp(36px,11vw,60px) 20px clamp(22px,6vw,34px);
 }
 .hero-eyebrow{
   font-size:.66rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);
 }
 .hero-logo{
-  width:clamp(168px,46vw,232px);height:auto;object-fit:contain;margin:clamp(6px,2.4vw,12px) 0;
-  filter:drop-shadow(0 14px 30px rgba(0,0,0,.6)) drop-shadow(0 0 46px rgba(230,168,60,.2));
+  width:clamp(180px,50vw,240px);height:auto;object-fit:contain;margin:clamp(14px,4.5vw,22px) 0;
+  filter:drop-shadow(0 14px 30px rgba(0,0,0,.55)) drop-shadow(0 0 46px rgba(230,168,60,.2));
 }
 .hero-title{
   font-size:clamp(1.14rem,5vw,1.4rem);line-height:1.1;font-weight:800;letter-spacing:.02em;
-  text-transform:uppercase;text-shadow:0 3px 14px rgba(0,0,0,.6);white-space:nowrap;
+  text-transform:uppercase;white-space:nowrap;
 }
-.hero-tagline{margin:6px 0 0;color:var(--text-dim);font-size:.86rem}
-/* Etiqueta secundaria: existe, pero ya no domina el hero como antes. */
+.hero-tagline{margin:8px 0 0;color:var(--text-dim);font-size:.86rem}
+/* Etiqueta secundaria y sutil: nunca domina el hero. */
 .hero-status{
   display:inline-flex;align-items:center;gap:6px;font-family:'Barlow Condensed';font-weight:700;
-  margin-top:10px;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);
-  background:rgba(10,10,12,.4);border:1px solid rgba(230,168,60,.45);padding:5px 13px;border-radius:999px;
+  margin-top:14px;font-size:.68rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);
+  background:transparent;border:1px solid rgba(230,168,60,.4);padding:5px 13px;border-radius:999px;
+}
+
+/* Con cover, un contenedor más ancho que alto (landscape) recorta la
+   foto cuadrada desde ARRIBA y deja ver el tramo de ABAJO -- que es
+   justo lo que queremos: se pierde una buena parte del negro que ya
+   "sobra" (porque ahora ese negro lo pone .hero-top) y se llega antes
+   a la cancha, sin perder nada de los jugadores en primer plano. */
+.hero-photo{position:relative;overflow:hidden;aspect-ratio:3/2;max-height:420px}
+.hero-bg{
+  position:absolute;inset:0;
+  background:url('hero-liga.png') center bottom/cover no-repeat, var(--bg);
+}
+/* Doble velo: uno arriba, del mismo negro que .hero-top, para que la
+   costura entre los dos bloques sea invisible aunque haya alguna
+   mínima diferencia de tono; y otro abajo, que funde la foto con el
+   fondo de la página para que el selector de categoría quede en su
+   propia superficie, bien separado, y no "pegado" a la imagen. */
+.hero-scrim{
+  position:absolute;inset:0;
+  background:
+    linear-gradient(180deg, var(--bg) 0%, rgba(10,10,12,0) 16%),
+    linear-gradient(180deg, rgba(10,10,12,0) 76%, rgba(10,10,12,.75) 92%, var(--bg) 100%);
 }
 .btn-cta{
   margin-top:6px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
@@ -152,16 +165,16 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .cat-active-value{font-size:.92rem;font-weight:800;color:var(--gold)}
 .cat-active-chevron{margin-left:auto;color:var(--text-dim);font-size:.9rem;line-height:1}
 
-/* Desktop: el contenedor de #app ya queda fijo en 1100px (ver arriba),
-   así que un recorte más panorámico alcanza para seguir mostrando la
-   cancha (no solo el negro superior) sin que el hero domine todo el
-   viewport -- la prioridad de diseño sigue siendo el celular. */
+/* Desktop: el contenedor de #app ya queda fijo en 1100px (ver arriba);
+   la franja de foto es más corta en relación al ancho porque .hero-top
+   ya no necesita tanto alto relativo -- la prioridad de diseño sigue
+   siendo el celular. */
 @media (min-width:900px){
-  .hero{aspect-ratio:6/5;max-height:900px}
-  .hero-inner{padding-top:40px}
+  .hero-top{min-height:0;max-height:none;padding-top:48px}
   .hero-logo{width:clamp(200px,20vw,260px)}
   .hero-title{font-size:1.7rem}
   .hero-tagline{font-size:.95rem}
+  .hero-photo{aspect-ratio:20/7;max-height:360px}
 }
 
 /* ---------- accesos rápidos ---------- */
