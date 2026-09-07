@@ -68,39 +68,56 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .screen-head h1{font-size:1.55rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
 .screen-head p{margin:2px 0 0;color:var(--text-dim);font-size:.85rem}
 
-/* ---------- hero fotográfico (Inicio) ---------- */
-.hero{position:relative;min-height:70vw;max-height:560px;overflow:hidden;
-  display:flex;align-items:flex-end}
+/* ---------- hero fotográfico (Inicio) ----------
+   hero-liga.png es un cuadrado (2048x2048) con casi el 90% superior en
+   negro/gris muy oscuro (cancha) y recién en el último tramo aparecen
+   los jugadores en primer plano más iluminados. Por eso el contenedor
+   se recorta en formato retrato (más alto que ancho): con cover, ese
+   ratio hace que el recorte sea horizontal (bordes laterales, que ya
+   son negros) y se preserva TODA la altura real de la foto. */
+.hero{
+  position:relative;overflow:hidden;
+  aspect-ratio:3/4;max-height:640px;
+  background:var(--bg);
+}
 .hero-bg{
   position:absolute;inset:0;
-  /* Fondo local de marca (assets/hero-inicio.jpg) + degradado oscuro para
-     que el texto siempre sea legible arriba de la foto. Si todavía no
-     subiste la foto, quedan solo los degradados: se ve intencional,
-     nunca roto. */
-  background:
-    linear-gradient(180deg, rgba(10,10,12,.15) 0%, rgba(10,10,12,.55) 55%, var(--bg) 96%),
-    linear-gradient(200deg, rgba(230,168,60,.16), rgba(10,10,12,0) 45%),
-    url('assets/hero-inicio.jpg') center 30%/cover no-repeat,
-    var(--bg-soft);
+  background:url('hero-liga.png') center top/cover no-repeat, var(--bg);
 }
-/* Envoltorio del contenido del hero -- en mobile apila texto y logo, en
-   desktop (ver breakpoint más abajo) pasa a texto-izquierda/logo-derecha. */
-.hero-inner{position:relative;z-index:1;width:100%;display:flex;flex-direction:column;gap:22px;padding:26px 20px 22px}
-.hero-content{display:flex;flex-direction:column;gap:10px}
-.hero-eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
-.hero-title{font-size:2.5rem;line-height:.98;font-weight:800;letter-spacing:.01em;text-transform:uppercase;
-  text-shadow:0 4px 18px rgba(0,0,0,.5)}
-.hero-tagline{margin:2px 0 0;color:var(--text-dim);font-size:.88rem;max-width:26ch}
+/* Velo: una viñeta suave enmarca la franja negra donde va la marca (le
+   da algo de aire "cinematográfico" y contraste extra) y se disuelve
+   por completo sobre la cancha y los jugadores -- la foto se ve limpia
+   ahí -- hasta fundirse con el fondo de la página justo en el borde
+   inferior, para que el salto hacia el contenido de abajo no se sienta
+   como una imagen pegada encima de la web. */
+.hero-scrim{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(120% 60% at 50% 4%, rgba(10,10,12,.5) 0%, rgba(10,10,12,0) 72%),
+    linear-gradient(180deg, rgba(10,10,12,0) 72%, rgba(10,10,12,.72) 91%, var(--bg) 100%);
+}
+.hero-inner{
+  position:relative;z-index:1;height:100%;width:100%;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:clamp(14px,4vw,22px) 20px 0;
+}
+.hero-eyebrow{
+  font-size:.66rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);
+}
+.hero-logo{
+  width:clamp(168px,46vw,232px);height:auto;object-fit:contain;margin:clamp(6px,2.4vw,12px) 0;
+  filter:drop-shadow(0 14px 30px rgba(0,0,0,.6)) drop-shadow(0 0 46px rgba(230,168,60,.2));
+}
+.hero-title{
+  font-size:clamp(1.14rem,5vw,1.4rem);line-height:1.1;font-weight:800;letter-spacing:.02em;
+  text-transform:uppercase;text-shadow:0 3px 14px rgba(0,0,0,.6);white-space:nowrap;
+}
+.hero-tagline{margin:6px 0 0;color:var(--text-dim);font-size:.86rem}
 /* Etiqueta secundaria: existe, pero ya no domina el hero como antes. */
 .hero-status{
-  display:inline-flex;align-self:flex-start;align-items:center;gap:6px;font-family:'Barlow Condensed';font-weight:700;
-  font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);
-  background:transparent;border:1px solid rgba(230,168,60,.45);padding:4px 12px;border-radius:999px;
-}
-.hero-media{display:flex;justify-content:center;align-items:center}
-.hero-logo{
-  width:auto;height:auto;max-width:160px;max-height:160px;object-fit:contain;
-  filter:drop-shadow(0 10px 24px rgba(0,0,0,.55));
+  display:inline-flex;align-items:center;gap:6px;font-family:'Barlow Condensed';font-weight:700;
+  margin-top:10px;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);
+  background:rgba(10,10,12,.4);border:1px solid rgba(230,168,60,.45);padding:5px 13px;border-radius:999px;
 }
 .btn-cta{
   margin-top:6px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
@@ -135,17 +152,16 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .cat-active-value{font-size:.92rem;font-weight:800;color:var(--gold)}
 .cat-active-chevron{margin-left:auto;color:var(--text-dim);font-size:.9rem;line-height:1}
 
-/* Desktop: el hero pasa a dos columnas (texto | logo grande), y el logo
-   crece porque ahora tiene espacio real para respirar. */
+/* Desktop: el contenedor de #app ya queda fijo en 1100px (ver arriba),
+   así que un recorte más panorámico alcanza para seguir mostrando la
+   cancha (no solo el negro superior) sin que el hero domine todo el
+   viewport -- la prioridad de diseño sigue siendo el celular. */
 @media (min-width:900px){
-  .hero{min-height:0;max-height:none}
-  .hero-inner{
-    max-width:1040px;margin:0 auto;padding:56px 48px;
-    display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:48px;
-  }
-  .hero-title{font-size:3.4rem}
-  .hero-tagline{font-size:1rem;max-width:34ch}
-  .hero-logo{max-width:300px;max-height:300px}
+  .hero{aspect-ratio:6/5;max-height:900px}
+  .hero-inner{padding-top:40px}
+  .hero-logo{width:clamp(200px,20vw,260px)}
+  .hero-title{font-size:1.7rem}
+  .hero-tagline{font-size:.95rem}
 }
 
 /* ---------- accesos rápidos ---------- */
