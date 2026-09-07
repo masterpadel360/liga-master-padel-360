@@ -529,17 +529,15 @@ function cargarMas_() {
     cache_.mas = datos;
     renderMas_(datos);
   }).catch(function () {
-    document.getElementById('reg-bloques').innerHTML = '<p class="state-empty">No se pudo cargar el reglamento.</p>';
     document.getElementById('premios-bloques').innerHTML = '<p class="state-empty">No se pudieron cargar los premios.</p>';
   });
 }
+// El reglamento ya no se arma con bloques de texto de la planilla: la
+// pantalla de Reglamento ahora es el PDF oficial completo (ver
+// index.html), así que datos.reglamento no se usa acá. Se sigue
+// pidiendo igual porque esta misma llamada alimenta Playoffs y Premios.
 function renderMas_(datos) {
   document.getElementById('playoffs-mensaje').textContent = datos.playoffsMensaje;
-
-  var reg = datos.reglamento.map(function (b) {
-    return '<div class="reg-block"><b>' + esc_(b.titulo) + '</b><p>' + esc_(b.texto) + '</p></div>';
-  }).join('');
-  document.getElementById('reg-bloques').innerHTML = reg || '<p class="state-empty">Todavía no se cargó el reglamento.</p>';
 
   var premios = datos.premios.map(function (p) {
     return '<div class="reg-block"><b>' + esc_(p.titulo) + '</b><p>' + esc_(p.texto) + '</p></div>';

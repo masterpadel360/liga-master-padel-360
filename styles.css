@@ -413,6 +413,29 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .reg-block b{font-size:.86rem;display:block;margin-bottom:5px}
 .reg-block p{margin:0;font-size:.82rem;color:var(--text-dim);line-height:1.5}
 
+/* ---------- reglamento (PDF oficial) ---------- */
+.doc-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;
+}
+.doc-card-ic{
+  width:56px;height:56px;border-radius:50%;flex-shrink:0;
+  background:var(--gold-dim);color:var(--gold);display:flex;align-items:center;justify-content:center;
+}
+.doc-card-ic .ic{width:26px;height:26px}
+.doc-card-btn{
+  width:100%;display:flex;align-items:center;justify-content:center;
+  background:var(--gold);color:var(--gold-ink);font-weight:800;font-size:.85rem;
+  text-transform:uppercase;letter-spacing:.03em;
+  padding:15px 22px;border-radius:999px;transition:transform .12s ease;
+}
+.doc-card-btn:active{transform:scale(.97)}
+.doc-card-download{
+  font-size:.78rem;color:var(--text-dim);font-weight:700;
+  text-decoration:underline;text-underline-offset:3px;
+}
+.doc-card-download:hover, .doc-card-download:focus-visible{color:var(--text)}
+
 /* ---------- fotos ---------- */
 .photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .photo-swatch{
