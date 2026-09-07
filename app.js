@@ -155,6 +155,10 @@ function irA(pantalla) {
   document.querySelectorAll('.nav-item').forEach(function (el) {
     el.classList.toggle('active', el.getAttribute('data-nav') === NAV_GRUPO[pantalla]);
   });
+  // En Inicio los accesos rápidos ya cumplen esa función: la barra
+  // inferior queda oculta ahí (haya o no categoría elegida) y vuelve a
+  // aparecer en cualquier otra pantalla.
+  document.querySelector('.bottom-nav').hidden = (pantalla === 'inicio');
   cargarPantalla_(pantalla);
   document.getElementById('body').scrollTop = 0;
 }
@@ -188,10 +192,8 @@ function pintarChipsCategoria_(contId) {
     return '<button class="chip' + (cat === categoriaActual ? ' active' : '') + '" data-cat="' + esc_(cat) + '">' + esc_(cat) + '</button>';
   }).join('');
 }
-document.addEventListener('click', function (e) {
-  var el = e.target.closest('[data-cat]');
-  if (!el) return;
-  categoriaActual = el.getAttribute('data-cat');
+function elegirCategoria_(cat) {
+  categoriaActual = cat;
   document.querySelectorAll('.cat-chips .chip').forEach(function (c) {
     c.classList.toggle('active', c.getAttribute('data-cat') === categoriaActual);
   });
@@ -199,7 +201,55 @@ document.addEventListener('click', function (e) {
   // Elegido el chip, el selector se cierra/compacta (patrón tap-para-
   // desplegar: la próxima vez que haga falta elegir, arranca cerrado).
   actualizarSelectorInicio_(false);
+  precargarPantallasCategoria_(categoriaActual);
   cargarPantalla_(pantallaActual);
+}
+
+// ============================================================
+// Tap robusto sobre los chips de categoría (Pointer Events)
+// ============================================================
+// #inicioCats tiene scroll horizontal: el navegador suprime el click
+// nativo apenas el dedo se mueve más de ~12-15px entre el touchstart y
+// el touchend, algo muy común ahí (arrastre parcial para ver más
+// categorías, inercia de scroll que no terminó de asentarse). Por eso
+// medimos nosotros mismos el desplazamiento real del puntero: si fue
+// chico, es un tap y elegimos la categoría; si fue grande, es un swipe
+// real y no hacemos nada (nunca llamamos preventDefault, así que el
+// scroll nativo de los chips sigue funcionando igual que siempre).
+// El mouse sigue resuelto por el click de siempre, que ya es
+// confiable, para no cambiar nada ahí.
+var UMBRAL_TAP_PX_ = 10;
+var tapPointerInicio_ = null;
+var tapChipManejadoEl_ = null;
+var tapChipManejadoTs_ = 0;
+
+document.addEventListener('pointerdown', function (e) {
+  if (tapPointerInicio_) return; // ya estamos siguiendo otro puntero
+  var el = e.target.closest('#inicioCats [data-cat]');
+  if (!el) return;
+  tapPointerInicio_ = { x: e.clientX, y: e.clientY, el: el, id: e.pointerId, tipo: e.pointerType };
+});
+document.addEventListener('pointerup', function (e) {
+  if (!tapPointerInicio_ || e.pointerId !== tapPointerInicio_.id) return;
+  var inicio = tapPointerInicio_;
+  tapPointerInicio_ = null;
+  if (inicio.tipo === 'mouse') return;
+  var dist = Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y);
+  if (dist > UMBRAL_TAP_PX_) return; // swipe real: se deja pasar, no es un tap
+  elegirCategoria_(inicio.el.getAttribute('data-cat'));
+  // Marca este chip como ya resuelto: el navegador todavía puede
+  // disparar un click sintético después del touchend, y no queremos
+  // procesar la selección dos veces.
+  tapChipManejadoEl_ = inicio.el;
+  tapChipManejadoTs_ = Date.now();
+});
+document.addEventListener('pointercancel', function () { tapPointerInicio_ = null; });
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-cat]');
+  if (!el) return;
+  if (el === tapChipManejadoEl_ && (Date.now() - tapChipManejadoTs_) < 800) return;
+  elegirCategoria_(el.getAttribute('data-cat'));
 });
 
 // ============================================================
@@ -311,6 +361,42 @@ function cargarFotosInicio_() {
     img.onerror = function () { /* la foto no cargó: el banner sigue oculto */ };
     img.src = foto.url;
   }).catch(function () { /* sin fotos no rompe Inicio */ });
+}
+
+// ============================================================
+// Precarga en segundo plano de Posiciones/Fixture/Resultados para la
+// categoría activa. Usa exactamente el mismo cache_ y las mismas
+// claves ('pos|cat', 'fix|cat', 'res|cat') que ya consultan
+// cargarPosiciones_/cargarFixture_/cargarResultados_ antes de pedir
+// red -- por eso alcanza con completar cache_ acá: si el jugador
+// después entra a esas pantallas y la precarga ya terminó, las va a
+// ver instantáneas, sin tocar en nada su lógica de carga ni de
+// render. Nunca renderiza nada ella misma (eso lo sigue haciendo cada
+// pantalla la primera vez que se visita, cache_ mediante).
+// Si una petición falla, el catch la ignora en silencio: no rompe
+// Inicio ni muestra ningún error, y esa pantalla simplemente va a
+// pedir sus datos de nuevo (como si no hubiese precarga) cuando el
+// jugador la visite.
+function precargarPantallasCategoria_(cat) {
+  if (!cat) return;
+  var claveP = 'pos|' + cat;
+  if (!cache_[claveP]) {
+    apiFetch('posiciones', { categoria: cat }).then(function (filas) {
+      cache_[claveP] = filas;
+    }).catch(function () { /* sin precarga, cargarPosiciones_ pide los datos igual */ });
+  }
+  var claveF = 'fix|' + cat;
+  if (!cache_[claveF]) {
+    apiFetch('fixture', { categoria: cat }).then(function (datos) {
+      cache_[claveF] = datos;
+    }).catch(function () { /* idem */ });
+  }
+  var claveR = 'res|' + cat;
+  if (!cache_[claveR]) {
+    apiFetch('resultados', { categoria: cat }).then(function (lista) {
+      cache_[claveR] = lista;
+    }).catch(function () { /* idem */ });
+  }
 }
 
 // ============================================================
@@ -565,6 +651,11 @@ window.addEventListener('DOMContentLoaded', function () {
   // El selector de categoría se pinta siempre, sin importar si el resto
   // del contenido de Inicio (novedades, sponsors, banner) falla.
   actualizarSelectorInicio_();
+
+  // Si ya había una categoría válida guardada, arrancamos a precargar
+  // Posiciones/Fixture/Resultados en segundo plano (no-op si no hay
+  // categoría: precargarPantallasCategoria_ corta sola).
+  precargarPantallasCategoria_(categoriaActual);
 
   try {
     renderInicio_(boot.inicio || {});
