@@ -126,26 +126,46 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   background:transparent;border:1px solid rgba(230,168,60,.4);padding:5px 13px;border-radius:999px;
 }
 
-/* Con cover, un contenedor más ancho que alto (landscape) recorta la
-   foto cuadrada desde ARRIBA y deja ver el tramo de ABAJO -- que es
-   justo lo que queremos: se pierde una buena parte del negro que ya
-   "sobra" (porque ahora ese negro lo pone .hero-top) y se llega antes
-   a la cancha, sin perder nada de los jugadores en primer plano. */
-.hero-photo{position:relative;overflow:hidden;aspect-ratio:3/2;max-height:420px}
+/* Contenedor más alto que ancho (retrato): con cover, ese ratio recorta
+   solo los bordes laterales (que ya son negros) y preserva TODA la
+   altura real de la foto -- los 4 jugadores, la cartelería del fondo y
+   la red quedan completos, nada de franja recortada. El filtro de
+   brillo/contraste es puramente de presentación (no toca el archivo):
+   la mitad de la cancha donde están los jugadores del fondo es
+   naturalmente muy oscura en la foto original, y esto recupera detalle
+   ahí sin lavar la zona ya bien iluminada de los jugadores de adelante. */
+.hero-photo{position:relative;overflow:hidden;aspect-ratio:3/4;max-height:640px}
 .hero-bg{
   position:absolute;inset:0;
-  background:url('hero-liga.png') center bottom/cover no-repeat, var(--bg);
+  background:url('hero-liga.png') center top/cover no-repeat, var(--bg);
+  filter:brightness(1.22) contrast(1.04);
 }
-/* Doble velo: uno arriba, del mismo negro que .hero-top, para que la
-   costura entre los dos bloques sea invisible aunque haya alguna
-   mínima diferencia de tono; y otro abajo, que funde la foto con el
-   fondo de la página para que el selector de categoría quede en su
-   propia superficie, bien separado, y no "pegado" a la imagen. */
+/* Dos velos largos y progresivos, solo en los extremos -- una curva de
+   varios pasos (no una rampa lineal corta), para que la disolución se
+   sienta cinematográfica y no como un corte. Arriba: cae dentro del
+   primer ~28% de .hero-photo, que en la foto real todavía es negro
+   puro (0-55% de hero-liga.png), así que no tapa nada -- solo asegura
+   que la costura con .hero-top sea perfecta aunque la curva sea larga.
+   Abajo: se mantiene invisible hasta el 68% y recién ahí empieza a
+   ceder, muy suave al principio y más marcada sobre el final, para
+   fundirse con el negro de la interfaz sin lavar a los jugadores de
+   adelante ni la cartelería -- el 68% central de la foto queda
+   completamente limpio, sin ningún velo encima. */
 .hero-scrim{
   position:absolute;inset:0;
   background:
-    linear-gradient(180deg, var(--bg) 0%, rgba(10,10,12,0) 16%),
-    linear-gradient(180deg, rgba(10,10,12,0) 76%, rgba(10,10,12,.75) 92%, var(--bg) 100%);
+    linear-gradient(180deg,
+      var(--bg) 0%,
+      rgba(10,10,12,.88) 7%,
+      rgba(10,10,12,.55) 15%,
+      rgba(10,10,12,.24) 22%,
+      rgba(10,10,12,0) 30%),
+    linear-gradient(180deg,
+      rgba(10,10,12,0) 68%,
+      rgba(10,10,12,.07) 80%,
+      rgba(10,10,12,.3) 90%,
+      rgba(10,10,12,.68) 96%,
+      var(--bg) 100%);
 }
 .btn-cta{
   margin-top:6px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
@@ -189,7 +209,13 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   .hero-logo{width:clamp(200px,20vw,260px)}
   .hero-title{font-size:1.7rem}
   .hero-tagline{font-size:.95rem}
-  .hero-photo{aspect-ratio:20/7;max-height:360px}
+  /* En desktop el contenedor es más ancho que alto por fuerza (no
+     tendría sentido una franja tan alta como en mobile), así que acá
+     sí hay recorte vertical -- pero mostrando la mitad inferior real
+     de la foto (50%), con margen de sobra antes de donde empiezan los
+     jugadores del fondo (~58%), para no perder nada de la escena. */
+  .hero-photo{aspect-ratio:2/1;max-height:600px}
+  .hero-bg{background-position:center bottom}
 }
 
 /* ---------- novedades ---------- */
@@ -262,18 +288,26 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .chip.active{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
 
 /* ---------- posiciones ----------
-   .standing-main comparte exactamente el mismo grid-template-columns,
-   gap y padding horizontal que .standings-head -- pero .standing-row
-   (su contenedor) tiene 1px de borde real que .standings-head no
-   tenía, y ese pixel corría todas las columnas de datos respecto del
-   encabezado. Un borde transparente acá compensa ese espacio sin que
-   se note, y deja las dos grillas pixel a pixel alineadas. */
+   Encabezado y filas comparten una única declaración de grid (mismo
+   display/columnas/gap en la misma regla): es estructuralmente
+   imposible que diverjan, porque no hay dos valores que puedan
+   desincronizarse -- hay uno solo. Las columnas numéricas tienen ancho
+   fijo (chico, porque son 1-2 dígitos) y PAREJA se lleva todo el resto
+   como 1fr. .standing-row (el contenedor real de .standing-main) tiene
+   1px de borde que .standings-head no tiene; el borde transparente de
+   abajo compensa ese espacio para que las dos grillas arranquen en el
+   mismo píxel. */
+.standings-head, .standing-main{
+  display:grid;grid-template-columns:26px 1fr 24px 24px 24px 34px;gap:3px;
+}
 .standings-head{
-  display:grid;grid-template-columns:26px 1fr 24px 24px 24px 34px;gap:3px;padding:0 12px;
-  border:1px solid transparent;
+  padding:0 12px;border:1px solid transparent;
   font-size:.62rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;
 }
-.sh-num{text-align:center}.sh-pts{text-align:right}
+/* Los 4 números (PJ/PG/PP/PTS) van todos centrados dentro de su
+   columna -- ninguno queda alineado a la derecha, para que no "parezca
+   corrido" respecto de los demás aunque su columna esté bien alineada. */
+.sh-num, .sh-pts{text-align:center}
 #posRows{display:flex;flex-direction:column;gap:6px}
 .standing-row{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
@@ -281,7 +315,7 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 }
 .standing-row.top{border-color:rgba(230,168,60,.4)}
 .standing-main{
-  display:grid;grid-template-columns:26px 1fr 24px 24px 24px 34px;gap:3px;align-items:center;
+  width:100%;align-items:center;
   padding:11px 12px;font-variant-numeric:tabular-nums;
 }
 .standing-rank{
@@ -292,8 +326,9 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .standing-rank.g2{background:#d7dadd;color:#12151a}
 .standing-rank.g3{background:#c98a4b;color:#1a0f04}
 .standing-pareja{font-size:.85rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.standing-num{text-align:center;font-size:.78rem;color:var(--text-dim);font-family:'IBM Plex Mono',monospace}
-.standing-pts{text-align:right;font-family:'Barlow Condensed';font-weight:800;font-size:1rem;color:var(--text)}
+.standing-num{font-size:.78rem;color:var(--text-dim);font-family:'IBM Plex Mono',monospace}
+.standing-pts{font-family:'Barlow Condensed';font-weight:800;font-size:1rem;color:var(--text)}
+.standing-num, .standing-pts{text-align:center}
 .standing-detail{
   max-height:0;overflow:hidden;transition:max-height .2s ease;border-top:1px solid transparent;
 }
