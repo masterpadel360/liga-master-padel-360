@@ -77,25 +77,6 @@
           </button>
         </section>
 
-        <nav class="quick-grid" id="inicio-quick-grid" aria-label="Accesos rápidos" hidden>
-          <button class="quick-card" data-go="posiciones">
-            <span class="qc-ic"><svg class="ic"><use href="#icon-chart"/></svg></span>
-            <span class="qc-tx"><b>Posiciones</b><span>Ver tabla</span></span>
-          </button>
-          <button class="quick-card" data-go="fixture">
-            <span class="qc-ic"><svg class="ic"><use href="#icon-calendar"/></svg></span>
-            <span class="qc-tx"><b>Fixture</b><span>Próximos partidos</span></span>
-          </button>
-          <button class="quick-card" data-go="resultados">
-            <span class="qc-ic"><svg class="ic"><use href="#icon-trophy"/></svg></span>
-            <span class="qc-tx"><b>Resultados</b><span>Partidos jugados</span></span>
-          </button>
-          <button class="quick-card" data-go="playoffs">
-            <span class="qc-ic"><svg class="ic"><use href="#icon-users"/></svg></span>
-            <span class="qc-tx"><b>Playoffs</b><span>Camino al título</span></span>
-          </button>
-        </nav>
-
         <div id="novedades"></div>
 
         <!-- Banner de comunidad: usa la primera foto real de GALERIA si existe.
@@ -117,17 +98,32 @@
           </div>
           <div class="sponsor-row" id="ini-sponsors-logos"></div>
         </div>
+
+        <div class="social-row">
+          <a class="social-link" href="https://www.instagram.com/masterpadelcba/" target="_blank" rel="noopener" aria-label="Seguinos en Instagram">
+            <svg class="ic" aria-hidden="true"><use href="#icon-instagram"/></svg>
+            <span>Instagram</span>
+          </a>
+          <a class="social-link" href="https://wa.me/5493516234487" target="_blank" rel="noopener" aria-label="Escribinos por WhatsApp">
+            <svg class="ic" aria-hidden="true"><use href="#icon-whatsapp"/></svg>
+            <span>WhatsApp</span>
+          </a>
+        </div>
       </div>
     </section>
 
     <!-- ============ POSICIONES ============ -->
     <section class="screen" id="screen-posiciones" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
       <div class="screen-head">
         <h1>Posiciones</h1>
         <p>Tabla en vivo — fase de grupos</p>
       </div>
       <div class="standings-head">
-        <span class="sh-rank"></span><span class="sh-pareja">Pareja</span>
+        <span class="sh-rank">Pos</span><span class="sh-pareja">Pareja</span>
         <span class="sh-num">PJ</span><span class="sh-num">PG</span><span class="sh-num">PP</span>
         <span class="sh-pts">Pts</span>
       </div>
@@ -137,6 +133,10 @@
 
     <!-- ============ FIXTURE ============ -->
     <section class="screen" id="screen-fixture" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
       <div class="screen-head">
         <h1>Fixture</h1>
         <p>Todos contra todos</p>
@@ -147,6 +147,10 @@
 
     <!-- ============ RESULTADOS ============ -->
     <section class="screen" id="screen-resultados" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
       <div class="screen-head">
         <h1>Resultados</h1>
         <p>Partidos ya jugados</p>
@@ -156,6 +160,10 @@
 
     <!-- ============ MÁS ============ -->
     <section class="screen" id="screen-mas" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
       <div class="screen-head">
         <h1>Más</h1>
         <p>Todo lo que necesitás</p>
@@ -163,6 +171,7 @@
       <div class="more-list">
         <button class="more-item" data-go="reglamento"><span class="mi-ic"><svg class="ic"><use href="#icon-book"/></svg></span><span class="mi-tx">Reglamento</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="premios"><span class="mi-ic"><svg class="ic"><use href="#icon-medal"/></svg></span><span class="mi-tx">Premios</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
+        <button class="more-item" data-go="playoffs"><span class="mi-ic"><svg class="ic"><use href="#icon-users"/></svg></span><span class="mi-tx">Playoffs</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="fotos"><span class="mi-ic"><svg class="ic"><use href="#icon-image"/></svg></span><span class="mi-tx">Galería</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="sponsors"><span class="mi-ic"><svg class="ic"><use href="#icon-heart"/></svg></span><span class="mi-tx">Sponsors</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="sobre-liga"><span class="mi-ic"><svg class="ic"><use href="#icon-info"/></svg></span><span class="mi-tx">Sobre la liga</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
@@ -172,6 +181,10 @@
 
     <!-- ============ PLAYOFFS ============ -->
     <section class="screen" id="screen-playoffs" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
       <button class="back-row" data-go="mas"><svg class="ic ic-sm"><use href="#icon-chevron"/></svg> Más</button>
       <div class="screen-head">
         <h1>Playoffs</h1>
@@ -293,7 +306,7 @@
 
   </main>
 
-  <nav class="bottom-nav" aria-label="Navegación principal" hidden>
+  <nav class="bottom-nav" aria-label="Navegación principal">
     <button class="nav-item" data-nav="inicio" data-go="inicio"><svg class="ic"><use href="#icon-home"/></svg><span class="ni-lb">Inicio</span></button>
     <button class="nav-item" data-nav="posiciones" data-go="posiciones"><svg class="ic"><use href="#icon-chart"/></svg><span class="ni-lb">Posic.</span></button>
     <button class="nav-item" data-nav="fixture" data-go="fixture"><svg class="ic"><use href="#icon-calendar"/></svg><span class="ni-lb">Fixture</span></button>

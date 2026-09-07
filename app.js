@@ -155,10 +155,6 @@ function irA(pantalla) {
   document.querySelectorAll('.nav-item').forEach(function (el) {
     el.classList.toggle('active', el.getAttribute('data-nav') === NAV_GRUPO[pantalla]);
   });
-  // En Inicio los accesos rápidos ya cumplen esa función: la barra
-  // inferior queda oculta ahí (haya o no categoría elegida) y vuelve a
-  // aparecer en cualquier otra pantalla.
-  document.querySelector('.bottom-nav').hidden = (pantalla === 'inicio');
   cargarPantalla_(pantalla);
   document.getElementById('body').scrollTop = 0;
 }
@@ -273,7 +269,6 @@ function actualizarSelectorInicio_(abrir) {
   var bloque = document.getElementById('cat-select-block');
   var filaActiva = document.getElementById('cat-active-row');
   var valorActivo = document.getElementById('cat-active-value');
-  var accesos = document.getElementById('inicio-quick-grid');
 
   if (typeof abrir === 'boolean') selectorInicioAbierto_ = abrir;
 
@@ -288,11 +283,6 @@ function actualizarSelectorInicio_(abrir) {
   bloque.classList.toggle('is-compact', hayCategoria && !mostrarChips);
   bloque.classList.toggle('needs-choice', !hayCategoria);
   valorActivo.textContent = hayCategoria ? categoriaActual : '';
-
-  // Antes de elegir categoría, Posiciones/Fixture/Resultados/Playoffs no
-  // se muestran: el objetivo de Inicio en ese estado es que el jugador
-  // elija su categoría primero.
-  accesos.hidden = !hayCategoria;
 }
 document.getElementById('cat-select-cta').addEventListener('click', function () {
   actualizarSelectorInicio_(true);

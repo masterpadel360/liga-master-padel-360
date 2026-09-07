@@ -68,6 +68,21 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .screen-head h1{font-size:1.55rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
 .screen-head p{margin:2px 0 0;color:var(--text-dim);font-size:.85rem}
 
+/* ---------- header de marca (pantallas internas) ----------
+   Fino a propósito: logo chico + wordmark + una línea sutil abajo.
+   Los márgenes negativos cancelan el padding de .screen para que la
+   línea llegue de borde a borde, como un header real. */
+.screen-brand{
+  display:flex;align-items:center;gap:9px;
+  margin:-10px -16px 4px;padding:13px 16px 12px;
+  border-bottom:1px solid var(--border);
+}
+.screen-brand-logo{height:20px;width:auto;object-fit:contain;flex-shrink:0}
+.screen-brand-tx{
+  font-family:'Barlow Condensed';font-weight:800;font-size:.76rem;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);
+}
+
 /* ---------- hero (Inicio) ----------
    Dos bloques apilados, no uno solo:
    1) .hero-top: negro sólido y limpio, sin foto. Acá vive toda la
@@ -88,9 +103,9 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 
 .hero-top{
   position:relative;background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-  min-height:82vh;max-height:760px;
-  padding:clamp(36px,11vw,60px) 20px clamp(22px,6vw,34px);
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;
+  min-height:94vh;max-height:840px;
+  padding:clamp(28px,8vw,48px) 20px clamp(22px,6vw,34px);
 }
 .hero-eyebrow{
   font-size:.66rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);
@@ -177,18 +192,6 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   .hero-photo{aspect-ratio:20/7;max-height:360px}
 }
 
-/* ---------- accesos rápidos ---------- */
-.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.quick-card{
-  display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-md);padding:14px 13px;box-shadow:var(--shadow-card);
-}
-.quick-card .qc-ic{color:var(--gold);flex-shrink:0}
-.quick-card .qc-tx{display:flex;flex-direction:column;gap:1px;overflow:hidden}
-.quick-card .qc-tx b{font-size:.86rem;font-weight:700}
-.quick-card .qc-tx span{font-size:.68rem;color:var(--text-dim)}
-.quick-card:active{background:var(--surface-strong)}
-
 /* ---------- novedades ---------- */
 #novedades{display:flex;flex-direction:column;gap:8px}
 .news-card{
@@ -228,6 +231,23 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 }
 .sponsor-chip.has-img{font-size:0;color:transparent}
 
+/* ---------- accesos sociales (Inicio) ----------
+   Monocromáticos y discretos a propósito: nada de verde WhatsApp ni
+   degradado Instagram -- misma superficie oscura y borde sutil que el
+   resto de las tarjetas de Inicio, para que se sientan parte de la web
+   y no un cartel de publicidad. */
+.social-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.social-link{
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:13px;font-size:.82rem;font-weight:700;color:var(--text-dim);
+  transition:background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.social-link .ic{color:var(--text-dim);transition:color .15s ease}
+.social-link:hover, .social-link:focus-visible{color:var(--text);border-color:var(--border-strong)}
+.social-link:hover .ic, .social-link:focus-visible .ic{color:var(--gold)}
+.social-link:active{background:var(--surface-strong)}
+
 /* ---------- selector de categoría: chips horizontales ---------- */
 .cat-chips, .fecha-chips, .filter-chips{
   display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scroll-snap-type:x proximity;
@@ -241,9 +261,16 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 }
 .chip.active{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
 
-/* ---------- posiciones ---------- */
+/* ---------- posiciones ----------
+   .standing-main comparte exactamente el mismo grid-template-columns,
+   gap y padding horizontal que .standings-head -- pero .standing-row
+   (su contenedor) tiene 1px de borde real que .standings-head no
+   tenía, y ese pixel corría todas las columnas de datos respecto del
+   encabezado. Un borde transparente acá compensa ese espacio sin que
+   se note, y deja las dos grillas pixel a pixel alineadas. */
 .standings-head{
-  display:grid;grid-template-columns:26px 1fr 30px 30px 30px 40px;gap:4px;padding:0 12px;
+  display:grid;grid-template-columns:26px 1fr 24px 24px 24px 34px;gap:3px;padding:0 12px;
+  border:1px solid transparent;
   font-size:.62rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;
 }
 .sh-num{text-align:center}.sh-pts{text-align:right}
@@ -254,7 +281,7 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 }
 .standing-row.top{border-color:rgba(230,168,60,.4)}
 .standing-main{
-  display:grid;grid-template-columns:26px 1fr 30px 30px 30px 40px;gap:4px;align-items:center;
+  display:grid;grid-template-columns:26px 1fr 24px 24px 24px 34px;gap:3px;align-items:center;
   padding:11px 12px;font-variant-numeric:tabular-nums;
 }
 .standing-rank{
