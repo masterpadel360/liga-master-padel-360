@@ -318,7 +318,6 @@ function cargarFotosInicio_() {
 // ============================================================
 function cargarPosiciones_() {
   var cat = categoriaActual; if (!cat) return;
-  pintarChipsCategoria_('posCats');
   var clave = 'pos|' + cat;
   if (cache_[clave]) { renderPosiciones_(cache_[clave]); return; }
   document.getElementById('posRows').innerHTML = '<div class="state-loading">Cargando…</div>';
@@ -360,7 +359,6 @@ document.addEventListener('click', function (e) {
 // ============================================================
 function cargarFixture_() {
   var cat = categoriaActual; if (!cat) return;
-  pintarChipsCategoria_('fixCats');
   var clave = 'fix|' + cat;
   if (cache_[clave]) { renderFixture_(cache_[clave]); return; }
   document.getElementById('fixMatches').innerHTML = '<div class="state-loading">Cargando…</div>';
@@ -418,7 +416,6 @@ document.addEventListener('click', function (e) {
 // ============================================================
 function cargarResultados_() {
   var cat = categoriaActual; if (!cat) return;
-  pintarChipsCategoria_('resCats');
   var clave = 'res|' + cat;
   if (cache_[clave]) { renderResultados_(cache_[clave]); return; }
   document.getElementById('resMatches').innerHTML = '<div class="state-loading">Cargando…</div>';

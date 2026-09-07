@@ -59,11 +59,6 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   .screen-pad{max-width:520px;margin-left:auto;margin-right:auto;width:100%}
 }
 
-.topbar{display:flex;justify-content:center;align-items:center;padding:16px 16px 4px;background:var(--bg)}
-.logo{height:46px;width:auto;display:block;border-radius:6px}
-.logo-fallback{font-family:'Barlow Condensed';font-weight:800;letter-spacing:.02em;
-  text-transform:uppercase;font-size:1.05rem;color:var(--text)}
-
 .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
 .screen{display:flex;flex-direction:column;gap:16px;padding:10px 16px 32px;animation:fade-in .18s ease}
 .screen.screen-flush{padding:0 0 28px}
