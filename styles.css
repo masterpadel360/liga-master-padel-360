@@ -48,6 +48,16 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   body{background:#000}
   #app{box-shadow:0 0 90px rgba(0,0,0,.7);min-height:100vh}
 }
+/* Desktop: el hero usa todo el ancho ensanchado de #app (texto izquierda /
+   logo grande derecha). El resto del contenido -- Inicio incluido, salvo
+   el hero -- se recentra a 520px para verse exactamente como en mobile,
+   solo que centrado con más aire alrededor. No afecta un celular en
+   ningún caso: por debajo de 900px de ancho, nada de este bloque aplica. */
+@media (min-width:900px){
+  #app{max-width:1100px}
+  .screen:not(.screen-flush){max-width:520px;margin-left:auto;margin-right:auto;width:100%}
+  .screen-pad{max-width:520px;margin-left:auto;margin-right:auto;width:100%}
+}
 
 .topbar{display:flex;justify-content:center;align-items:center;padding:16px 16px 4px;background:var(--bg)}
 .logo{height:46px;width:auto;display:block;border-radius:6px}
@@ -78,15 +88,24 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
     url('assets/hero-inicio.jpg') center 30%/cover no-repeat,
     var(--bg-soft);
 }
-.hero-content{position:relative;z-index:1;padding:26px 20px 22px;display:flex;flex-direction:column;gap:10px}
+/* Envoltorio del contenido del hero -- en mobile apila texto y logo, en
+   desktop (ver breakpoint más abajo) pasa a texto-izquierda/logo-derecha. */
+.hero-inner{position:relative;z-index:1;width:100%;display:flex;flex-direction:column;gap:22px;padding:26px 20px 22px}
+.hero-content{display:flex;flex-direction:column;gap:10px}
 .hero-eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
 .hero-title{font-size:2.5rem;line-height:.98;font-weight:800;letter-spacing:.01em;text-transform:uppercase;
   text-shadow:0 4px 18px rgba(0,0,0,.5)}
 .hero-tagline{margin:2px 0 0;color:var(--text-dim);font-size:.88rem;max-width:26ch}
+/* Etiqueta secundaria: existe, pero ya no domina el hero como antes. */
 .hero-status{
   display:inline-flex;align-self:flex-start;align-items:center;gap:6px;font-family:'Barlow Condensed';font-weight:700;
-  font-size:.8rem;letter-spacing:.03em;text-transform:uppercase;color:var(--gold-ink);
-  background:linear-gradient(120deg, var(--gold-light), var(--gold));padding:5px 14px;border-radius:999px;
+  font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);
+  background:transparent;border:1px solid rgba(230,168,60,.45);padding:4px 12px;border-radius:999px;
+}
+.hero-media{display:flex;justify-content:center;align-items:center}
+.hero-logo{
+  width:auto;height:auto;max-width:160px;max-height:160px;object-fit:contain;
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.55));
 }
 .btn-cta{
   margin-top:6px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
@@ -94,6 +113,30 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   padding:13px 22px;border-radius:999px;transition:transform .12s ease;
 }
 .btn-cta:active{transform:scale(.96)}
+
+/* ---------- selección de categoría (Inicio) ---------- */
+.cat-select-block{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:16px;display:flex;flex-direction:column;gap:10px;
+  transition:border-color .2s ease, background-color .2s ease;
+}
+.cat-select-block.needs-choice{border-color:rgba(230,168,60,.55);background:var(--gold-dim)}
+.cat-select-title{font-size:1rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+.cat-select-sub{margin:0;font-size:.78rem;color:var(--text-dim)}
+.cat-select-block.needs-choice .cat-select-sub{color:var(--text)}
+
+/* Desktop: el hero pasa a dos columnas (texto | logo grande), y el logo
+   crece porque ahora tiene espacio real para respirar. */
+@media (min-width:900px){
+  .hero{min-height:0;max-height:none}
+  .hero-inner{
+    max-width:1040px;margin:0 auto;padding:56px 48px;
+    display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:48px;
+  }
+  .hero-title{font-size:3.4rem}
+  .hero-tagline{font-size:1rem;max-width:34ch}
+  .hero-logo{max-width:300px;max-height:300px}
+}
 
 /* ---------- accesos rápidos ---------- */
 .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
