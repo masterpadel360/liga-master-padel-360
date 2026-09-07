@@ -182,6 +182,9 @@ document.addEventListener('click', function (e) {
 // Inicio
 // ============================================================
 function renderInicio_(datos) {
+  var novedades = datos.novedades || [];
+  var sponsors = datos.sponsors || [];
+
   var elStatus = document.getElementById('hero-status');
   if (datos.banner && datos.banner.titulo) {
     elStatus.hidden = false;
@@ -190,14 +193,14 @@ function renderInicio_(datos) {
     elStatus.hidden = true;
   }
 
-  document.getElementById('novedades').innerHTML = datos.novedades.map(function (n) {
+  document.getElementById('novedades').innerHTML = novedades.map(function (n) {
     return '<div class="news-card"><b>' + esc_(n.titulo) + '</b><span>' + esc_(n.texto) + '</span></div>';
   }).join('');
 
   var elSp = document.getElementById('ini-sponsors');
-  if (datos.sponsors.length) {
+  if (sponsors.length) {
     elSp.hidden = false;
-    document.getElementById('ini-sponsors-logos').innerHTML = datos.sponsors.map(sponsorChipHtml_).join('');
+    document.getElementById('ini-sponsors-logos').innerHTML = sponsors.map(sponsorChipHtml_).join('');
   } else {
     elSp.hidden = true;
   }
@@ -471,11 +474,15 @@ function renderSponsors_(datos) {
 // ============================================================
 window.addEventListener('DOMContentLoaded', function () {
   apiFetch('bootstrap').then(function (boot) {
-    CATEGORIAS = boot.categorias || [];
-    categoriaActual = CATEGORIAS[0] || null;
-    renderInicio_(boot.inicio);
-    cargarFotosInicio_();
-    irA('inicio'); // fija el estado activo del nav sin reanimar la pantalla
+  CATEGORIAS = boot.categorias || [];
+  categoriaActual = CATEGORIAS[0] || null;
+  try {
+    renderInicio_(boot.inicio || {});
+  } catch (e) {
+    console.error('No se pudo pintar el contenido dinámico de Inicio:', e);
+  }
+  cargarFotosInicio_();
+  irA('inicio');
   }).catch(function (err) {
     document.getElementById('screen-inicio').innerHTML =
       '<p class="state-empty">No se pudo conectar con el servidor. Si esto persiste, revisá API_URL en app.js.</p>';
