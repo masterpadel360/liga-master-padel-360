@@ -64,7 +64,7 @@ function apiFetchJsonp_(url) {
 
     setTimeout(function () {
       if (!resuelto) { limpiar(); reject(new Error('Tiempo de espera agotado.')); }
-    }, 12000);
+    }, 30000);
   });
 }
 function reservasFetch(accion, params) {
