@@ -641,7 +641,7 @@ function cargarReservas_() {
 
   reservasFetch('disponibilidad')
     .then(function (datos) {
-      cont.innerHTML = '<pre>' + esc(JSON.stringify(datos, null, 2)) + '</pre>';
+    cont.innerHTML = '<pre>' + esc_(JSON.stringify(datos, null, 2)) + '</pre>';
     })
     .catch(function () {
       cont.innerHTML = '<div class="state-loading">No se pudo cargar reservas.</div>';
