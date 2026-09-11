@@ -188,6 +188,7 @@ function cargarPantalla_(pantalla) {
   else if (pantalla === 'playoffs' || pantalla === 'reglamento' || pantalla === 'premios') cargarMas_();
   else if (pantalla === 'fotos') cargarFotos_();
   else if (pantalla === 'sponsors') cargarSponsors_();
+  else if (pantalla === 'reservas') cargarReservas_();
   // 'sobre-liga' y 'contacto' son contenido fijo del HTML: no piden nada.
 }
 
@@ -627,6 +628,24 @@ function renderSponsors_(datos) {
     return chip.replace('<div class="sponsor-chip', '<a href="' + esc_(s.link) + '" target="_blank" rel="noopener" class="sponsor-chip').replace(/<\/div>$/, '</a>');
   }).join('');
   document.getElementById('sponsors-empty').hidden = !!(datos.destacado || datos.resto.length);
+}
+
+// ============================================================
+// Reservas
+// ============================================================
+function cargarReservas_() {
+  var cont = document.getElementById('reservas-contenido');
+  if (!cont) return;
+
+  cont.innerHTML = '<div class="state-loading">Cargando...</div>';
+
+  reservasFetch('disponibilidad')
+    .then(function (datos) {
+      cont.innerHTML = '<pre>' + esc(JSON.stringify(datos, null, 2)) + '</pre>';
+    })
+    .catch(function () {
+      cont.innerHTML = '<div class="state-loading">No se pudo cargar reservas.</div>';
+    });
 }
 
 // ============================================================
