@@ -493,3 +493,8 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:0.001ms!important;transition-duration:0.001ms!important}
 }
+.reserva-horario.seleccionado {
+  outline: 3px solid #ffffff;
+  transform: scale(1.03);
+  font-weight: 700;
+}
