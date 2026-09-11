@@ -634,7 +634,7 @@ function renderSponsors_(datos) {
 // Reservas
 // ============================================================
 function cargarReservas_() {
-  var cont = document.getElementById('reservas-contenido');
+  var cont = document.getElementById('reservas-disponibilidad');
   if (!cont) return;
 
   cont.innerHTML = '<div class="state-loading">Cargando...</div>';
