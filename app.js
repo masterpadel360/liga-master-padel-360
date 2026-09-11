@@ -1,4 +1,3 @@
-```
 /**
  * MASTER PÁDEL 360 — app.js
  * =======================================================================
@@ -659,4 +658,3 @@ window.addEventListener('DOMContentLoaded', function () {
     console.error(err);
   });
 });
-```
