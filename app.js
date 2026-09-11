@@ -643,7 +643,8 @@ function cargarReservas_() {
     .then(function (datos) {
     cont.innerHTML = '<pre>' + esc_(JSON.stringify(datos, null, 2)) + '</pre>';
     })
-    .catch(function () {
+    .catch(function (error) {
+      console.error('ERROR RESERVAS:', error);
       cont.innerHTML = '<div class="state-loading">No se pudo cargar reservas.</div>';
     });
 }
