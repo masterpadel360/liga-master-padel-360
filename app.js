@@ -673,16 +673,74 @@ function cargarPartidosReserva_() {
       var html = '<h3>Elegí tu partido</h3>';
 
       partidos.forEach(function (partido) {
-        html += '<button type="button" class="reserva-horario">';
-        html += esc_(partido.parejaA) + ' vs ' + esc_(partido.parejaB);
-        html += '</button>';
-      });
-
+  html += '<button type="button" class="reserva-horario" ' +
+    'onclick="seleccionarPartidoReserva_(this)" ' +
+    'data-id-partido="' + esc_(partido.idPartido) + '">';
+  html += esc_(partido.parejaA) + ' vs ' + esc_(partido.parejaB);
+  html += '</button>';
+});
       cont.innerHTML = html;
     })
     .catch(function (error) {
       console.error('ERROR PARTIDOS:', error);
       cont.innerHTML = '<div class="state-loading">No se pudieron cargar los partidos.</div>';
+    });
+}function seleccionarPartidoReserva_(boton) {
+  document.querySelectorAll('#reserva-partidos .reserva-horario').forEach(function (b) {
+    b.classList.remove('seleccionado');
+  });
+
+  boton.classList.add('seleccionado');
+
+  var idPartido = boton.getAttribute('data-id-partido');
+  cargarHorariosReserva_(idPartido);
+}function cargarHorariosReserva_(idPartido) {
+  var cont = document.getElementById('reserva-partidos');
+
+  var horarios = document.getElementById('reserva-horarios');
+  if (!horarios) {
+    horarios = document.createElement('div');
+    horarios.id = 'reserva-horarios';
+    cont.appendChild(horarios);
+  }
+
+  horarios.innerHTML = '<div class="state-loading">Cargando horarios...</div>';
+
+  reservasFetch('disponibilidad')
+    .then(function (datos) {
+      var dias = datos && datos.dias ? datos.dias : [];
+
+      if (!dias.length) {
+        horarios.innerHTML = '<div class="state-loading">No hay horarios disponibles.</div>';
+        return;
+      }
+
+      var html = '<h3>Elegí día y horario</h3>';
+
+      dias.forEach(function (dia) {
+        html += '<div class="reserva-dia">';
+        html += '<h3>' + esc_(dia.diaSemana) + ' · ' + esc_(dia.fecha) + '</h3>';
+
+        dia.franjas.forEach(function (franja) {
+          html += '<button type="button" class="reserva-horario" ' +
+            'data-id-partido="' + esc_(idPartido) + '" ' +
+            'data-fecha="' + esc_(dia.fecha) + '" ' +
+            'data-inicio="' + esc_(franja.inicio) + '" ' +
+            'data-fin="' + esc_(franja.fin) + '" ' +
+            'onclick="seleccionarReserva_(this)">';
+          html += '<strong>' + esc_(franja.inicio) + ' - ' + esc_(franja.fin) + '</strong>';
+          html += '<span>' + franja.disponibles + ' disponibles</span>';
+          html += '</button>';
+        });
+
+        html += '</div>';
+      });
+
+      horarios.innerHTML = html;
+    })
+    .catch(function (error) {
+      console.error('ERROR HORARIOS:', error);
+      horarios.innerHTML = '<div class="state-loading">No se pudieron cargar los horarios.</div>';
     });
 }
 function seleccionarReserva_(boton) {
