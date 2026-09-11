@@ -655,7 +655,7 @@ function cargarReservas_() {
         html += '<h3>' + esc_(dia.diaSemana) + ' · ' + esc_(dia.fecha) + '</h3>';
 
         dia.franjas.forEach(function (franja) {
-          html += '<button type="button" class="reserva-horario">';
+          html += '<button type="button" class="reserva-horario" onclick="seleccionarReserva_(this)">';
           html += '<strong>' + esc_(franja.inicio) + ' - ' + esc_(franja.fin) + '</strong>';
           html += '<span>' + franja.disponibles + ' disponibles</span>';
           html += '</button>';
@@ -670,6 +670,12 @@ function cargarReservas_() {
       console.error('ERROR RESERVAS:', error);
       cont.innerHTML = '<div class="state-loading">No se pudo cargar reservas.</div>';
     });
+}function seleccionarReserva_(boton) {
+  document.querySelectorAll('.reserva-horario').forEach(function (b) {
+    b.classList.remove('seleccionado');
+  });
+
+  boton.classList.add('seleccionado');
 }
 // ============================================================
 // Arranque
