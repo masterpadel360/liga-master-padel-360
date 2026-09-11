@@ -749,6 +749,24 @@ function seleccionarReserva_(boton) {
   });
 
   boton.classList.add('seleccionado');
+
+  var idPartido = boton.getAttribute('data-id-partido');
+  var fecha = boton.getAttribute('data-fecha');
+  var horarioInicio = boton.getAttribute('data-inicio');
+  var horarioFin = boton.getAttribute('data-fin');
+
+  reservasFetch('retenerTurno', {
+    idPartido: idPartido,
+    fecha: fecha,
+    horarioInicio: horarioInicio,
+    horarioFin: horarioFin
+  })
+    .then(function (retencion) {
+      console.log('RETENCION OK:', retencion);
+    })
+    .catch(function (error) {
+      console.error('ERROR RETENCION:', error);
+    });
 }
 // ============================================================
 // Arranque
