@@ -50,7 +50,7 @@ function reservasFetch(action, params) {
     return arr;
   }, []);
 
-  qs.push('action=' + encodeURIComponent(action));
+  qs.push('accion=' + encodeURIComponent(action));
 
   var url = URL_API_RESERVAS + '?' + qs.join('&');
 
