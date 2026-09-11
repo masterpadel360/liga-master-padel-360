@@ -9,7 +9,7 @@
  * IMPORTANTE: reemplazá la constante API_URL de acá abajo por la URL de
  * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
-var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
+ var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
 var RESERVAS_API_URL = 'https://script.google.com/macros/s/AKfycbzetv0LlHG-VUXO2HoPNkdXi3VOIlW05ElKFytwRSgSJHNpD5R7bPeTUbWm-eIYCID-5A/exec';
 
 // ============================================================
