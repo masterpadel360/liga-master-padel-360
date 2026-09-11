@@ -33,9 +33,34 @@
   <symbol id="icon-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor"/></symbol>
   <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 5.5 15.5 12 9 18.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M4.5 12h15M13.5 6 19.5 12 13.5 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-court" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" stroke-width="1.8"/><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="15.3" y1="15.3" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 10.5V7.8a4.5 4.5 0 0 1 9 0v2.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/></symbol>
 </svg>
 
-<div id="app">
+<!-- ============================================================
+     Acceso general a la liga -- pantalla completa, visible por defecto
+     en el HTML crudo (antes de que corra ningún JS) para que nunca haya
+     un parpadeo mostrando la app antes de decidir si hace falta pedir la
+     contraseña. app.js decide, apenas arranca, si la oculta (ya hay un
+     acceso guardado y válido) o la deja así.
+     ============================================================ -->
+<div class="access-gate" id="access-gate">
+  <div class="access-card">
+    <img src="logo.png" alt="MASTER PÁDEL 360" class="access-logo" onerror="this.hidden=true">
+    <span class="access-ic"><svg class="ic"><use href="#icon-lock"/></svg></span>
+    <h1 class="access-title">Acceso Liga Master Pádel 360</h1>
+    <p class="access-sub">Ingresá la contraseña de la liga para continuar.</p>
+    <div class="rsv-field">
+      <label for="accesoClave">Contraseña</label>
+      <input type="password" id="accesoClave" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <p class="rsv-error" id="access-error" hidden></p>
+    <button class="doc-card-btn" id="accesoBtn" type="button">ENTRAR A LA LIGA</button>
+  </div>
+</div>
+
+<div id="app" hidden>
 
   <main class="body" id="body">
 
@@ -76,6 +101,15 @@
             <span class="cat-active-chevron" aria-hidden="true">▾</span>
           </button>
         </section>
+
+        <button class="rsv-cta-card" data-go="reservar">
+          <span class="rsv-cta-ic"><svg class="ic"><use href="#icon-court"/></svg></span>
+          <span class="rsv-cta-tx">
+            <b>Reservá tu cancha</b>
+            <span>Elegí día y horario para tu próximo partido</span>
+          </span>
+          <span class="rsv-cta-arrow"><svg class="ic"><use href="#icon-arrow"/></svg></span>
+        </button>
 
         <div id="novedades"></div>
 
@@ -157,22 +191,7 @@
       </div>
       <div id="resMatches"><div class="state-loading">Cargando…</div></div>
     </section>
-  <!-- ===================== RESERVAS ===================== -->
-  <section class="screen" id="screen-reservas" hidden>
-    <header class="screen-brand">
-      <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
-      <strong class="screen-brand-txt">MASTER <span>PÁDEL</span> 360</strong>
-    </header>
 
-    <div class="screen-head">
-      <h1>Reservas</h1>
-      <p>Elegí un día y horario disponible</p>
-    </div>
-
-    <div id="reservas-disponibilidad">
-      <div class="state-loading">Cargando disponibilidad…</div>
-    </div>
-  </section>
     <!-- ============ MÁS ============ -->
     <section class="screen" id="screen-mas" hidden>
       <header class="screen-brand">
@@ -184,13 +203,14 @@
         <p>Todo lo que necesitás</p>
       </div>
       <div class="more-list">
+        <button class="more-item is-featured" data-go="reservar"><span class="mi-ic"><svg class="ic"><use href="#icon-court"/></svg></span><span class="mi-tx">Reservar turno</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
+        <button class="more-item" data-go="buscar-reserva"><span class="mi-ic"><svg class="ic"><use href="#icon-search"/></svg></span><span class="mi-tx">Buscar mi reserva</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="reglamento"><span class="mi-ic"><svg class="ic"><use href="#icon-book"/></svg></span><span class="mi-tx">Reglamento</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="premios"><span class="mi-ic"><svg class="ic"><use href="#icon-medal"/></svg></span><span class="mi-tx">Premios</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="playoffs"><span class="mi-ic"><svg class="ic"><use href="#icon-users"/></svg></span><span class="mi-tx">Playoffs</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="fotos"><span class="mi-ic"><svg class="ic"><use href="#icon-image"/></svg></span><span class="mi-tx">Galería</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="sponsors"><span class="mi-ic"><svg class="ic"><use href="#icon-heart"/></svg></span><span class="mi-tx">Sponsors</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="sobre-liga"><span class="mi-ic"><svg class="ic"><use href="#icon-info"/></svg></span><span class="mi-tx">Sobre la liga</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
-           <button class="more-item" data-go="reservas"><span class="mi-ic"><svg class="ic"><use href="#icon-calendar"/></svg></span><span class="mi-tx">Reservas</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="contacto"><span class="mi-ic"><svg class="ic"><use href="#icon-mail"/></svg></span><span class="mi-tx">Contacto</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
       </div>
     </section>
@@ -325,6 +345,190 @@
         </a>
       </div>
       <p class="hint-line">¿Cambiaste de número o de usuario? Editá los links de este bloque directo en index.html.</p>
+    </section>
+
+    <!-- ============ RESERVAR TURNO ============ -->
+    <!-- Wizard de un solo screen con 4 pasos internos, manejados por JS
+         (rsv-panel-*). Habla con RESERVAS_API_URL (Reservas API), un
+         proyecto de Apps Script separado -- nunca con API_URL. -->
+    <section class="screen" id="screen-reservar" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
+      <button class="back-row" data-go="mas"><svg class="ic ic-sm"><use href="#icon-chevron"/></svg> Más</button>
+      <div class="screen-head">
+        <h1>Reservar turno</h1>
+        <p>Elegí tu cruce y aseguralo con la seña</p>
+      </div>
+
+      <div class="rsv-steps" id="rsv-steps">
+        <span class="rsv-step" data-step="categoria"></span>
+        <span class="rsv-step" data-step="cruce"></span>
+        <span class="rsv-step" data-step="turno"></span>
+        <span class="rsv-step" data-step="checkout"></span>
+      </div>
+
+      <!-- PASO 1: categoría -->
+      <div class="rsv-panel" id="rsv-panel-categoria">
+        <h2 class="rsv-panel-title">Elegí tu categoría</h2>
+        <div class="cat-chips" id="rsvCats"></div>
+      </div>
+
+      <!-- PASO 2: cruce -->
+      <div class="rsv-panel" id="rsv-panel-cruce" hidden>
+        <button class="rsv-back" data-rsv-back="categoria">‹ Categoría</button>
+        <h2 class="rsv-panel-title">Elegí tu cruce</h2>
+        <div id="rsvCruces"><div class="state-loading">Cargando…</div></div>
+      </div>
+
+      <!-- PASO 3: día + horario -->
+      <div class="rsv-panel" id="rsv-panel-turno" hidden>
+        <button class="rsv-back" data-rsv-back="cruce">‹ Cruce</button>
+        <h2 class="rsv-panel-title">Elegí día y horario</h2>
+        <p class="hint-line" id="rsv-turno-hint">La cancha exacta se asigna al confirmar.</p>
+        <div id="rsvDias"><div class="state-loading">Cargando…</div></div>
+      </div>
+
+      <!-- PASO 4: checkout (retención activa) -->
+      <div class="rsv-panel" id="rsv-panel-checkout" hidden>
+        <div class="rsv-hold-banner">
+          <span class="rsv-hold-lbl">Turno retenido</span>
+          <span class="rsv-hold-timer" id="rsv-hold-timer">10:00</span>
+        </div>
+        <div class="rsv-summary" id="rsv-summary"></div>
+
+        <h2 class="rsv-panel-title">Tus datos</h2>
+        <div class="rsv-field">
+          <label for="rsvNombre">Nombre y apellido</label>
+          <input type="text" id="rsvNombre" maxlength="120" placeholder="Ej: Juan Pérez" autocomplete="name">
+        </div>
+        <div class="rsv-field">
+          <label for="rsvTelefono">Teléfono</label>
+          <input type="tel" id="rsvTelefono" maxlength="40" placeholder="Ej: 3511234567" autocomplete="tel">
+        </div>
+
+        <h2 class="rsv-panel-title">Seña para confirmar</h2>
+        <div class="rsv-pago-card">
+          <div class="rsv-pago-row"><span>Valor total del turno</span><b>$36.000</b></div>
+          <div class="rsv-pago-row highlight"><span>Reserva para confirmar</span><b>$9.000</b></div>
+          <div class="rsv-pago-row"><span>Saldo pendiente</span><b>$27.000</b></div>
+          <div class="rsv-alias-row">
+            <div>
+              <span class="rsv-alias-lbl">Alias para transferir</span>
+              <span class="rsv-alias-value">masterpadel.360</span>
+            </div>
+            <button class="rsv-copy-btn" id="rsvCopyAlias" type="button">Copiar alias</button>
+          </div>
+        </div>
+
+        <h2 class="rsv-panel-title">Comprobante de la seña</h2>
+        <label class="rsv-upload" id="rsvUploadLabel">
+          <input type="file" id="rsvComprobante" accept="image/jpeg,image/png" hidden>
+          <span class="rsv-upload-ic"><svg class="ic"><use href="#icon-image"/></svg></span>
+          <span class="rsv-upload-tx" id="rsvUploadTx">Subí una captura de pantalla del comprobante (JPG o PNG, máx. 5 MB)</span>
+        </label>
+
+        <p class="rsv-error" id="rsv-checkout-error" hidden></p>
+        <div id="rsv-checkout-err-actions" hidden>
+          <button class="rsv-back" id="rsvElegirOtroTurno">Elegir otro turno</button>
+        </div>
+        <button class="doc-card-btn rsv-confirm-btn" id="rsvConfirmarBtn" type="button">Confirmar reserva</button>
+      </div>
+
+      <!-- PASO FINAL: solicitud enviada (queda PENDIENTE_APROBACION -- ya
+           NO es una reserva confirmada todavía, ver app.js) -->
+      <div class="rsv-panel" id="rsv-panel-exito" hidden>
+        <div class="rsv-exito-ic">⏳</div>
+        <h2 class="rsv-panel-title center">Solicitud enviada</h2>
+        <p class="rsv-pendiente-note">Tu turno quedó bloqueado y está pendiente de aprobación.</p>
+        <div class="rsv-summary" id="rsv-exito-resumen"></div>
+
+        <div class="rsv-codigo-card">
+          <span class="rsv-codigo-lbl">Código de tu reserva</span>
+          <span class="rsv-codigo-value" id="rsv-exito-codigo"></span>
+          <button class="rsv-copy-btn" id="rsvCopyCodigo" type="button">Copiar código</button>
+        </div>
+        <p class="rsv-privado-note">Guardá este código para volver a acceder a tu reserva.</p>
+
+        <a class="rsv-whatsapp-btn" id="rsvWhatsappLink" href="#" target="_blank" rel="noopener">
+          <svg class="ic" aria-hidden="true"><use href="#icon-whatsapp"/></svg>
+          <span>ENVIAR RESERVA POR WHATSAPP</span>
+        </a>
+        <p class="hint-line">Así nos llega el aviso y te queda el código guardado en el chat.</p>
+
+        <a class="doc-card-btn" id="rsvGestionarLink" href="#">Gestionar mi reserva</a>
+        <p class="rsv-privado-note">Este enlace es privado y personal. No lo compartas.</p>
+        <button class="back-row" id="rsvVolverAReservar" type="button">‹ Volver a Reservas</button>
+        <button class="back-row" data-go="mas">Volver a Más</button>
+      </div>
+    </section>
+
+    <!-- ============ BUSCAR MI RESERVA (teléfono + código, sin link) ============ -->
+    <section class="screen" id="screen-buscar-reserva" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
+      <button class="back-row" data-go="mas"><svg class="ic ic-sm"><use href="#icon-chevron"/></svg> Más</button>
+      <div class="screen-head">
+        <h1>Buscar mi reserva</h1>
+        <p>Sin el link, con teléfono y código</p>
+      </div>
+      <div class="rsv-field">
+        <label for="buscarTelefono">Teléfono usado en la reserva</label>
+        <input type="tel" id="buscarTelefono" maxlength="40" placeholder="Ej: 3511234567" autocomplete="tel">
+      </div>
+      <div class="rsv-field">
+        <label for="buscarCodigo">Código de la reserva</label>
+        <input type="text" id="buscarCodigo" maxlength="12" placeholder="Ej: A3B7K9QZ" autocapitalize="characters" autocomplete="off">
+      </div>
+      <p class="rsv-error" id="buscar-reserva-error" hidden></p>
+      <button class="doc-card-btn" id="buscarReservaBtn" type="button">Buscar mi reserva</button>
+      <p class="hint-line">Los dos datos tienen que ser de la misma reserva.</p>
+    </section>
+
+    <!-- ============ GESTIÓN DE RESERVA (vía ?token=...) ============ -->
+    <section class="screen" id="screen-reserva-gestion" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360</span>
+      </header>
+      <div class="screen-head">
+        <h1>Tu reserva</h1>
+        <p>Gestión privada del turno</p>
+      </div>
+      <div id="rsvGestionContenido"><div class="state-loading">Cargando…</div></div>
+    </section>
+
+    <!-- ============ ADMIN: reservas pendientes (vía ?admin=1) ============ -->
+    <!-- Sin link en ningún menú a propósito -- solo se entra escribiendo
+         ?admin=1 en la URL. Pide una contraseña propia, separada de la
+         contraseña general de acceso (ver app.js / CodigoReservasAPI.gs). -->
+    <section class="screen" id="screen-admin-reservas" hidden>
+      <header class="screen-brand">
+        <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360 · ADMIN</span>
+      </header>
+      <a class="back-row" href="./">‹ Salir del panel</a>
+      <div class="screen-head">
+        <h1>Reservas pendientes</h1>
+        <p>Aprobar o rechazar solicitudes</p>
+      </div>
+
+      <div id="admin-gate">
+        <div class="rsv-field">
+          <label for="adminClave">Contraseña de administrador</label>
+          <input type="password" id="adminClave" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <p class="rsv-error" id="admin-gate-error" hidden></p>
+        <button class="doc-card-btn" id="adminEntrarBtn" type="button">Entrar</button>
+      </div>
+
+      <div id="admin-panel" hidden>
+        <button class="rsv-copy-btn" id="adminRefrescarBtn" type="button">Actualizar lista</button>
+        <div id="adminPendientesLista"><div class="state-loading">Cargando…</div></div>
+      </div>
     </section>
 
   </main>

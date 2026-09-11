@@ -488,13 +488,197 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .nav-item .ni-lb{font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.02em}
 .nav-item.active{color:var(--gold)}
 
+/* ---------- Reservar turno: CTA en Inicio + item destacado en Más ----------
+   El CTA vive en .screen-pad, después de cat-select-block y antes de
+   #novedades -- nunca dentro de .hero/.hero-top/.hero-photo, que quedan
+   intactos tal como se aprobaron. */
+.rsv-cta-card{
+  position:relative;display:flex;align-items:center;gap:13px;width:100%;
+  background:var(--surface);border:1px solid rgba(230,168,60,.35);border-radius:var(--radius-lg);
+  padding:15px 14px;box-shadow:var(--shadow-card);
+}
+.rsv-cta-ic{
+  width:44px;height:44px;border-radius:12px;flex-shrink:0;background:var(--gold-dim);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;
+}
+.rsv-cta-tx{display:flex;flex-direction:column;gap:2px;flex:1}
+.rsv-cta-tx b{font-size:.94rem;font-weight:800}
+.rsv-cta-tx span{font-size:.76rem;color:var(--text-dim)}
+.rsv-cta-arrow{color:var(--gold);flex-shrink:0}
+
+.more-item.is-featured{border-color:rgba(230,168,60,.45);background:var(--gold-dim)}
+.more-item.is-featured .mi-tx{color:var(--gold-light)}
+
+/* ---------- Reservar turno: wizard ---------- */
+.rsv-steps{display:flex;align-items:center;gap:6px}
+.rsv-step{flex:1;height:4px;border-radius:999px;background:var(--surface-strong)}
+.rsv-step.active, .rsv-step.done{background:var(--gold)}
+
+.rsv-panel{display:flex;flex-direction:column;gap:14px}
+.rsv-panel-title{font-size:1rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+.rsv-panel-title.center{text-align:center}
+.rsv-back{font-size:.76rem;color:var(--text-dim);font-weight:700;align-self:flex-start}
+
+.rsv-cruce-card{
+  width:100%;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-md);padding:14px;margin-bottom:8px;
+}
+.rsv-cruce-pareja{flex:1;font-size:.85rem;font-weight:700;text-align:center}
+.rsv-cruce-vs{font-family:'Barlow Condensed';font-size:.68rem;color:var(--text-faint);letter-spacing:.1em;flex-shrink:0}
+
+.rsv-dia-block{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.rsv-dia-label{font-size:.78rem;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em}
+.rsv-turno-list{display:flex;flex-direction:column;gap:8px}
+.rsv-turno-btn{
+  display:flex;align-items:center;justify-content:space-between;width:100%;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:13px 14px;transition:border-color .12s ease;
+}
+.rsv-turno-btn:active{border-color:var(--gold)}
+.rsv-turno-btn:disabled{opacity:.5;cursor:not-allowed}
+.rsv-turno-btn.rsv-turno-en-vuelo{border-color:var(--gold);opacity:.85}
+.rsv-turno-hora{font-size:.86rem;font-weight:700}
+.rsv-turno-cupo{font-size:.72rem;color:var(--gold);font-weight:700}
+
+.rsv-hold-banner{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--gold-dim);border:1px solid rgba(230,168,60,.5);border-radius:var(--radius-md);
+  padding:12px 15px;
+}
+.rsv-hold-lbl{font-size:.76rem;font-weight:800;color:var(--gold-light);text-transform:uppercase;letter-spacing:.02em}
+.rsv-hold-timer{font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--gold)}
+
+.rsv-summary{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:8px}
+.rsv-summary-row{display:flex;align-items:center;justify-content:space-between;font-size:.82rem;gap:10px}
+.rsv-summary-row span{color:var(--text-dim)}
+.rsv-summary-row b{font-weight:700;text-align:right}
+
+.rsv-field{display:flex;flex-direction:column;gap:6px}
+.rsv-field label{font-size:.72rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.rsv-field input{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 13px;font-size:.9rem;color:var(--text);font-family:inherit;width:100%;
+}
+.rsv-field input:focus{border-color:var(--gold);outline:none}
+
+.rsv-pago-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:9px}
+.rsv-pago-row{display:flex;align-items:center;justify-content:space-between;font-size:.84rem;color:var(--text-dim)}
+.rsv-pago-row b{color:var(--text);font-weight:700}
+.rsv-pago-row.highlight{color:var(--gold-light);font-weight:700}
+.rsv-pago-row.highlight b{color:var(--gold)}
+.rsv-alias-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-top:1px solid var(--border);padding-top:11px;margin-top:2px;
+}
+.rsv-alias-lbl{display:block;font-size:.66rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.rsv-alias-value{display:block;font-size:.92rem;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.rsv-copy-btn{
+  flex-shrink:0;background:var(--gold);color:var(--gold-ink);font-size:.74rem;font-weight:800;
+  padding:9px 14px;border-radius:999px;white-space:nowrap;
+}
+
+.rsv-upload{
+  display:flex;align-items:center;gap:12px;background:var(--surface);border:1px dashed var(--border-strong);
+  border-radius:var(--radius-md);padding:14px;cursor:pointer;
+}
+.rsv-upload-ic{width:38px;height:38px;border-radius:10px;background:var(--surface-strong);color:var(--text-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rsv-upload-tx{font-size:.82rem;color:var(--text-dim);font-weight:600}
+
+.rsv-error{
+  color:var(--warn);background:var(--warn-bg);border:1px solid rgba(255,182,72,.35);
+  border-radius:var(--radius-sm);padding:11px 13px;font-size:.8rem;font-weight:600;margin:0;
+}
+.rsv-warn-text{color:var(--warn);font-size:.82rem;line-height:1.5;margin:0 0 12px}
+
+.rsv-confirm-btn{width:100%;border:none;cursor:pointer}
+.rsv-confirm-btn:disabled{opacity:.5;cursor:not-allowed}
+
+.rsv-exito-ic{
+  width:60px;height:60px;border-radius:50%;background:var(--gold);color:var(--gold-ink);
+  display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;margin:6px auto 0;
+}
+.rsv-privado-note{text-align:center;font-size:.76rem;color:var(--text-faint);margin:0}
+
+/* ---------- Reservar turno: código corto ---------- */
+.rsv-codigo-card{
+  background:var(--gold-dim);border:1px solid rgba(230,168,60,.5);border-radius:var(--radius-md);
+  padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;
+}
+.rsv-codigo-lbl{font-size:.66rem;color:var(--gold-light);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.rsv-codigo-value{font-family:'IBM Plex Mono',monospace;font-size:1.35rem;font-weight:700;letter-spacing:.12em;color:var(--gold)}
+
+/* ---------- Reservar turno: gestión / cancelación ---------- */
+#rsv-cancel-zone{margin-top:4px;display:flex;flex-direction:column;gap:10px}
+.rsv-cancel-actions{display:flex;gap:10px}
+.rsv-btn-ghost, .rsv-btn-danger{
+  flex:1;padding:12px;border-radius:999px;font-size:.82rem;font-weight:800;text-align:center;
+}
+.rsv-btn-ghost{background:var(--surface-strong);color:var(--text)}
+.rsv-btn-danger{background:var(--warn);color:#2a1500}
+.rsv-btn-aprobar{
+  flex:1;padding:12px;border-radius:999px;font-size:.82rem;font-weight:800;text-align:center;
+  background:var(--gold);color:var(--gold-ink);
+}
+
+/* ---------- Reservar turno: nota de estado (pendiente/rechazado) ---------- */
+.rsv-pendiente-note{
+  background:var(--gold-dim);border:1px solid rgba(230,168,60,.4);border-radius:var(--radius-md);
+  padding:12px 14px;font-size:.82rem;color:var(--text);line-height:1.5;margin:0;
+}
+
+/* ---------- Reservar turno: botón de WhatsApp ---------- */
+/* Mismo lenguaje visual que el resto de la app (negro/dorado, sin verde
+   de marca ni estética de promo) -- coherente con .social-link, que ya
+   trata a WhatsApp como un ícono monocromático más, no como un cartel. */
+.rsv-whatsapp-btn{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--surface-strong);border:1px solid var(--border-strong);color:var(--text);
+  font-weight:800;font-size:.85rem;text-transform:uppercase;letter-spacing:.02em;
+  padding:15px 22px;border-radius:999px;transition:border-color .12s ease, transform .12s ease;
+}
+.rsv-whatsapp-btn:active{transform:scale(.97)}
+.rsv-whatsapp-btn .ic{color:var(--gold)}
+
+/* ---------- Acceso general (contraseña de la liga) ---------- */
+.access-gate{
+  position:fixed;inset:0;z-index:50;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.access-card{
+  width:100%;max-width:360px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+}
+.access-logo{width:96px;height:auto;object-fit:contain;margin-bottom:2px}
+.access-ic{
+  width:48px;height:48px;border-radius:50%;background:var(--gold-dim);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;
+}
+.access-title{font-size:1.2rem;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+.access-sub{margin:-6px 0 4px;font-size:.84rem;color:var(--text-dim)}
+.access-card .rsv-field{width:100%;text-align:left}
+.access-card .doc-card-btn{width:100%;border:none;cursor:pointer}
+
+/* ---------- Panel admin (?admin=1) ---------- */
+#admin-gate{display:flex;flex-direction:column;gap:14px;max-width:360px}
+#admin-gate .doc-card-btn{width:100%;border:none;cursor:pointer}
+#admin-panel{display:flex;flex-direction:column;gap:14px}
+#adminRefrescarBtn{align-self:flex-start}
+#adminPendientesLista{display:flex;flex-direction:column;gap:12px}
+.admin-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:14px;display:flex;flex-direction:column;gap:7px;
+}
+.admin-card-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.82rem}
+.admin-card-row span{color:var(--text-dim);flex-shrink:0}
+.admin-card-row b{font-weight:700;text-align:right}
+.admin-comprobante-link{
+  font-size:.8rem;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;
+  align-self:flex-start;margin-top:2px;
+}
+.admin-card-actions{display:flex;gap:10px;margin-top:6px}
+.admin-card-actions button{border:none;cursor:pointer}
+
 /* ---------- accesibilidad ---------- */
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:0.001ms!important;transition-duration:0.001ms!important}
-}
-.reserva-horario.seleccionado {
-  outline: 3px solid #ffffff;
-  transform: scale(1.03);
-  font-weight: 700;
 }
