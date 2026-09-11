@@ -641,14 +641,36 @@ function cargarReservas_() {
 
   reservasFetch('disponibilidad')
     .then(function (datos) {
-    cont.innerHTML = '<pre>' + esc_(JSON.stringify(datos, null, 2)) + '</pre>';
+      var dias = datos && datos.dias ? datos.dias : [];
+
+      if (!dias.length) {
+        cont.innerHTML = '<div class="state-loading">No hay horarios disponibles.</div>';
+        return;
+      }
+
+      var html = '';
+
+      dias.forEach(function (dia) {
+        html += '<div class="reserva-dia">';
+        html += '<h3>' + esc_(dia.diaSemana) + ' · ' + esc_(dia.fecha) + '</h3>';
+
+        dia.franjas.forEach(function (franja) {
+          html += '<button type="button" class="reserva-horario">';
+          html += '<strong>' + esc_(franja.inicio) + ' - ' + esc_(franja.fin) + '</strong>';
+          html += '<span>' + franja.disponibles + ' disponibles</span>';
+          html += '</button>';
+        });
+
+        html += '</div>';
+      });
+
+      cont.innerHTML = html;
     })
     .catch(function (error) {
       console.error('ERROR RESERVAS:', error);
       cont.innerHTML = '<div class="state-loading">No se pudo cargar reservas.</div>';
     });
 }
-
 // ============================================================
 // Arranque
 // ============================================================
