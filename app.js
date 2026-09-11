@@ -10,7 +10,7 @@
  * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
 var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
-
+var RESERVAS_API_URL = 'https://script.google.com/macros/s/AKfycbzetv0LlHG-VUXO2HoPNkdXi3VOIlW05ElKFytwRSgSJHNpD5R7bPeTUbWm-eIYCID-5A/exec';
 
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
@@ -67,7 +67,18 @@ function apiFetchJsonp_(url) {
     }, 12000);
   });
 }
+function reservasFetch(accion, params) {
+  params = params || {};
+  var qs = Object.keys(params).reduce(function (arr, k) {
+    if (params[k] !== undefined && params[k] !== null) {
+      arr.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+    }
+    return arr;
+  }, ['accion=' + encodeURIComponent(accion)]).join('&');
 
+  var url = RESERVAS_API_URL + '?' + qs;
+  return apiFetchJson_(url).catch(function () { return apiFetchJsonp_(url); });
+}
 // ============================================================
 // Estado global de la SPA
 // ============================================================
