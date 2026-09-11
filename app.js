@@ -52,7 +52,7 @@ function reservasFetch(action, params) {
 
   qs.push('action=' + encodeURIComponent(action));
 
-  var url = RESERVAS_API_URL + '?' + qs.join('&');
+  var url = URL_API_RESERVAS + '?' + qs.join('&');
 
   return apiFetchJson_(url).then(function (payload) {
     if (!payload || !payload.ok) {
