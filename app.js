@@ -1,3 +1,4 @@
+```
 /**
  * MASTER PÁDEL 360 — app.js
  * =======================================================================
@@ -9,8 +10,8 @@
  * IMPORTANTE: reemplazá la constante API_URL de acá abajo por la URL de
  * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
- var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
-var RESERVAS_API_URL = 'https://script.google.com/macros/s/AKfycbzetv0LlHG-VUXO2HoPNkdXi3VOIlW05ElKFytwRSgSJHNpD5R7bPeTUbWm-eIYCID-5A/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
+
 
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
@@ -39,28 +40,7 @@ function apiFetchJson_(url) {
       return payload.data;
     });
 }
-// API exclusiva de Reservas
-function reservasFetch(action, params) {
-  params = params || {};
 
-  var qs = Object.keys(params).reduce(function (arr, k) {
-    if (params[k] !== undefined && params[k] !== null) {
-      arr.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
-    }
-    return arr;
-  }, []);
-
-  qs.push('accion=' + encodeURIComponent(action));
-
-  var url = URL_API_RESERVAS + '?' + qs.join('&');
-
-  return apiFetchJson_(url).then(function (payload) {
-    if (!payload || !payload.ok) {
-      throw new Error(payload && payload.error ? payload.error : 'Error en Reservas API');
-    }
-    return payload.data;
-  });
-}
 var jsonpContador_ = 0;
 function apiFetchJsonp_(url) {
   return new Promise(function (resolve, reject) {
@@ -679,3 +659,4 @@ window.addEventListener('DOMContentLoaded', function () {
     console.error(err);
   });
 });
+```
