@@ -124,6 +124,39 @@ function pedirConCache_(clave, pedirFn) {
   return p;
 }
 
+// Igual que pedirConCache_, pero SIN el atajo de "si ya está en cache_,
+// devolvelo sin pedir nada" -- lo usan los pings de "entrada en calor"
+// (calentarReservasApi_ y el refresco silencioso tras un retenerTurno
+// fallido), que a propósito quieren datos frescos de la red aunque ya
+// haya algo en caché. Lo que SÍ comparten con pedirConCache_ es
+// cachePromesas_: si para la misma clave ya hay un pedido reciclado en
+// vuelo (sea de acá o de un pedirConCache_ normal), lo reutilizan en vez
+// de disparar un fetch nuevo.
+//
+// Por qué hace falta esto -- bug real medido en producción, no una
+// suposición: el keep-alive (cada 4 minutos, ver iniciarKeepAlive_) y una
+// acción real del jugador (por ejemplo, tocar "Elegir otro turno" después
+// de que venciera una retención) pueden coincidir casi en el mismo
+// instante. Antes de este arreglo, cada uno disparaba su PROPIO fetch()
+// independiente a "disponibilidad" -- y se confirmó en vivo que cuando
+// eso pasa, Apps Script/Google devuelven 404 ("No se pudo abrir el
+// archivo en este momento") en LOS DOS pedidos, no en uno solo. No hace
+// falta que el jugador haga nada raro para toparse con esto: alcanza con
+// tener la pestaña abierta el tiempo suficiente para que el keep-alive
+// tickee justo cuando se vuelve a pedir disponibilidad.
+function pedirSinDuplicarEnVuelo_(clave, pedirFn) {
+  if (cachePromesas_[clave]) return cachePromesas_[clave];
+  var p = pedirFn().then(function (datos) {
+    delete cachePromesas_[clave];
+    return datos;
+  }).catch(function (err) {
+    delete cachePromesas_[clave];
+    throw err;
+  });
+  cachePromesas_[clave] = p;
+  return p;
+}
+
 // ============================================================
 // Categoría guardada del jugador (localStorage)
 // ============================================================
@@ -787,7 +820,7 @@ var RSV_DISPONIBILIDAD_FRESCO_MS_ = 20000;
 var disponibilidadUltimoFetchTs_ = 0;
 function calentarReservasApi_() {
   if (cache_.disponibilidad && (Date.now() - disponibilidadUltimoFetchTs_) < RSV_DISPONIBILIDAD_FRESCO_MS_) return;
-  reservasApiGet_('disponibilidad', {}).then(function (datos) {
+  pedirSinDuplicarEnVuelo_('disponibilidad', function () { return reservasApiGet_('disponibilidad', {}); }).then(function (datos) {
     disponibilidadUltimoFetchTs_ = Date.now();
     cache_.disponibilidad = datos; // de paso, refresca el caché con datos frescos
   }).catch(function () { /* esto es solo un ping de entrada en calor: si falla, no pasa nada */ });
@@ -995,7 +1028,7 @@ document.addEventListener('click', function (e) {
     document.getElementById('rsvDias').innerHTML =
       '<p class="state-empty">' + esc_((err && err.message) || 'No se pudo retener ese turno. Probá de nuevo.') + '</p>';
     delete cache_.disponibilidad;
-    reservasApiGet_('disponibilidad', {}).then(function (datos) { disponibilidadUltimoFetchTs_ = Date.now(); cache_.disponibilidad = datos; }).catch(function () { /* si falla, se vuelve a pedir sola la próxima vez que haga falta */ });
+    pedirSinDuplicarEnVuelo_('disponibilidad', function () { return reservasApiGet_('disponibilidad', {}); }).then(function (datos) { disponibilidadUltimoFetchTs_ = Date.now(); cache_.disponibilidad = datos; }).catch(function () { /* si falla, se vuelve a pedir sola la próxima vez que haga falta */ });
   });
 });
 
