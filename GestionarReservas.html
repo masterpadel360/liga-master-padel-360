@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; padding: 12px; color: #222; }
+      h3 { margin: 0 0 10px; }
+      #refrescar { margin-bottom: 10px; padding: 6px 12px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
+      #estado { color: #666; margin-bottom: 10px; }
+      .card { border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+      .fila { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+      .fila span:first-child { color: #666; }
+      .fila b { text-align: right; }
+      .acciones { display: flex; gap: 8px; margin-top: 8px; }
+      .acciones button { flex: 1; cursor: pointer; padding: 8px 12px; border-radius: 4px; border: none; font-weight: bold; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .rechazar { background: #d93025; color: white; }
+      .aprobar { background: #1e8e3e; color: white; }
+      a.comprobante { display: inline-block; margin-top: 6px; }
+      .error { color: #d93025; font-size: 12px; margin-top: 6px; display: none; }
+      .vacio { color: #666; text-align: center; padding: 24px 0; }
+    </style>
+  </head>
+  <body>
+    <h3>Reservas pendientes de aprobación</h3>
+    <button id="refrescar">Actualizar lista</button>
+    <div id="estado"></div>
+    <div id="lista"></div>
+
+    <script>
+      // La contraseña de administrador de reservas se recibe UNA VEZ acá,
+      // ya validada por gestionarReservasDesdeMenu_ antes de abrir este
+      // diálogo -- nunca se le pide de nuevo al usuario dentro del panel.
+      var CLAVE = <?!= JSON.stringify(clave) ?>;
+
+      // gestionarReservasDesdeMenu_ ya hizo, para validar la contraseña,
+      // el mismo listarPendientes que antes se volvía a pedir acá apenas
+      // se abría el diálogo -- eso duplicaba la exposición al endpoint
+      // de reservas (medido en vivo como inestable: la misma llamada
+      // puede tardar 1s o 20s+, o directamente no responder nunca) justo
+      // en el momento más sensible, el de abrir el panel. Ahora se reusa
+      // ese resultado como dato inicial: el panel pinta esto DIRECTO, sin
+      // ninguna llamada de red al arrancar. "Actualizar lista" y
+      // Aprobar/Rechazar siguen usando google.script.run como antes --
+      // ahí no había duplicación que evitar.
+      var PENDIENTES_INICIALES = <?!= JSON.stringify(pendientesIniciales) ?>;
+
+      function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      // google.script.run no tiene ningún timeout propio -- si el pedido
+      // por UrlFetchApp del lado del servidor (llamarReservasApi_, en
+      // CodigoAdminLiga.gs) tarda mucho (el backend de reservas es
+      // conocido por ser lento en algunos momentos, ver el historial de
+      // esta app), el diálogo se queda en "Cargando…" sin ningún aviso,
+      // indefinidamente, sin que el usuario sepa si sigue en curso o si
+      // quedó colgado. Esto NO cancela el pedido en curso (no se puede
+      // desde acá) -- solo avisa que está tardando más de lo normal, para
+      // no dejar al usuario mirando una pantalla en blanco sin ninguna
+      // pista.
+      var AVISO_LENTITUD_MS_ = 12000;
+
+      function cargar() {
+        document.getElementById('estado').textContent = 'Cargando…';
+        document.getElementById('lista').innerHTML = '';
+        var yaTermino = false;
+        var avisoLentitud = setTimeout(function () {
+          if (yaTermino) return;
+          document.getElementById('estado').textContent =
+            'Esto está tardando más de lo normal (el servidor de reservas puede estar lento en este momento). Podés seguir esperando o cerrar este panel y volver a intentar más tarde.';
+        }, AVISO_LENTITUD_MS_);
+
+        google.script.run
+          .withSuccessHandler(function (lista) {
+            yaTermino = true;
+            clearTimeout(avisoLentitud);
+            document.getElementById('estado').textContent = '';
+            pintar(lista);
+          })
+          .withFailureHandler(function (err) {
+            yaTermino = true;
+            clearTimeout(avisoLentitud);
+            document.getElementById('estado').textContent = 'Error: ' + ((err && err.message) || err);
+          })
+          .reservasAdminListarPendientes(CLAVE);
+      }
+
+      function pintar(lista) {
+        var cont = document.getElementById('lista');
+        if (!lista || !lista.length) {
+          cont.innerHTML = '<div class="vacio">No hay reservas pendientes de aprobación por ahora.</div>';
+          return;
+        }
+        cont.innerHTML = lista.map(function (r) {
+          return '' +
+            '<div class="card" data-id="' + esc(r.idReserva) + '">' +
+              '<div class="fila"><span>Categoría</span><b>' + esc(r.categoria) + '</b></div>' +
+              '<div class="fila"><span>Cruce</span><b>' + esc(r.parejaA) + ' vs ' + esc(r.parejaB) + '</b></div>' +
+              '<div class="fila"><span>Fecha</span><b>' + esc(r.fecha) + '</b></div>' +
+              '<div class="fila"><span>Horario</span><b>' + esc(r.horarioInicio) + ' - ' + esc(r.horarioFin) + '</b></div>' +
+              '<div class="fila"><span>Cancha</span><b>' + (r.cancha ? 'Cancha ' + esc(r.cancha) : '—') + '</b></div>' +
+              '<div class="fila"><span>Nombre</span><b>' + esc(r.nombreSolicitante) + '</b></div>' +
+              '<div class="fila"><span>Teléfono</span><b>' + esc(r.telefonoSolicitante) + '</b></div>' +
+              '<div class="fila"><span>Seña pagada</span><b>$' + esc(r.montoPagado) + '</b></div>' +
+              '<div class="fila"><span>Código</span><b>' + esc(r.codigoReserva) + '</b></div>' +
+              (r.comprobanteUrl
+                ? '<a class="comprobante" href="' + esc(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante ↗</a>'
+                : '<div class="fila"><span>Comprobante</span><b>—</b></div>') +
+              '<div class="error" id="err-' + esc(r.idReserva) + '"></div>' +
+              '<div class="acciones">' +
+                '<button class="rechazar" data-accion="rechazar" data-id="' + esc(r.idReserva) + '" type="button">Rechazar</button>' +
+                '<button class="aprobar" data-accion="aprobar" data-id="' + esc(r.idReserva) + '" type="button">Aprobar</button>' +
+              '</div>' +
+            '</div>';
+        }).join('');
+      }
+
+      document.getElementById('refrescar').addEventListener('click', cargar);
+
+      // Reintento automático SOLO para aprobar/rechazar -- son idempotentes
+      // por diseño en el backend (ver mp360ReservasAprobar_/mp360ReservasRechazar_
+      // en CodigoReservasAPI.gs: si el estado ya es el resultado pedido,
+      // devuelven éxito en vez de error). Por eso acá es seguro reintentar
+      // ante CUALQUIER fallo -- ya sea que la escritura anterior realmente
+      // no se haya hecho (el reintento la hace), o que sí se haya hecho
+      // pero la respuesta se haya perdido en el camino (el reintento
+      // simplemente confirma el mismo resultado, nunca aprueba/rechaza dos
+      // veces). google.script.run no tiene ningún timeout propio -- por
+      // eso "colgado" acá significa literalmente "todavía no volvió nada".
+      var REINTENTOS_ACCION_MS_ = [3000, 6000];
+      function llamarConReintento_(nombreFuncion, id, numIntento, btn) {
+        numIntento = numIntento || 0;
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            [nombreFuncion](CLAVE, id);
+        }).catch(function (err) {
+          if (numIntento >= REINTENTOS_ACCION_MS_.length) throw err;
+          btn.textContent = 'Reintentando…';
+          return new Promise(function (r) { setTimeout(r, REINTENTOS_ACCION_MS_[numIntento]); })
+            .then(function () { return llamarConReintento_(nombreFuncion, id, numIntento + 1, btn); });
+        });
+      }
+
+      document.getElementById('lista').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-accion]');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        var accion = btn.getAttribute('data-accion');
+        var card = btn.closest('.card');
+        var errEl = document.getElementById('err-' + id);
+        errEl.style.display = 'none';
+        card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        btn.textContent = accion === 'aprobar' ? 'Aprobando…' : 'Rechazando…';
+
+        var yaTerminoAccion = false;
+        var avisoLentitudAccion = setTimeout(function () {
+          if (yaTerminoAccion) return;
+          errEl.textContent = 'Esto está tardando más de lo normal -- el servidor de reservas puede estar lento. Se está reintentando solo; podés seguir esperando.';
+          errEl.style.display = 'block';
+        }, AVISO_LENTITUD_MS_);
+
+        var llamada = accion === 'aprobar' ? 'reservasAdminAprobar' : 'reservasAdminRechazar';
+        llamarConReintento_(llamada, id, 0, btn)
+          .then(function () {
+            yaTerminoAccion = true;
+            clearTimeout(avisoLentitudAccion);
+            card.remove();
+            if (!document.querySelector('.card')) {
+              document.getElementById('lista').innerHTML = '<div class="vacio">No hay reservas pendientes de aprobación por ahora.</div>';
+            }
+          })
+          .catch(function (err) {
+            yaTerminoAccion = true;
+            clearTimeout(avisoLentitudAccion);
+            card.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+            btn.textContent = accion === 'aprobar' ? 'Aprobar' : 'Rechazar';
+            errEl.textContent = (err && err.message) || 'No se pudo procesar. Probá de nuevo.';
+            errEl.style.display = 'block';
+          });
+      });
+
+      // Pintado inicial DIRECTO con el dato que ya trajo gestionarReservasDesdeMenu_
+      // -- sin llamar a cargar() acá (esa función sigue existiendo, la usa
+      // el botón "Actualizar lista" para pedir un estado fresco cuando el
+      // usuario lo pida a propósito).
+      pintar(PENDIENTES_INICIALES);
+    </script>
+  </body>
+</html>

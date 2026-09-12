@@ -1036,10 +1036,26 @@ function reservarRenderDias_(datos) {
 document.addEventListener('click', function (e) {
   var el = e.target.closest('#rsvDias [data-rsv-fecha]');
   if (!el || reservaEnvioEnCurso_) return;
-  reservaEnvioEnCurso_ = true;
   var fecha = el.getAttribute('data-rsv-fecha');
   var horarioInicio = el.getAttribute('data-rsv-inicio');
   var horarioFin = el.getAttribute('data-rsv-fin');
+
+  // Guarda defensiva: sin esto, si reservaPartido_ (o su idPartido) se
+  // perdiera por cualquier motivo entre elegir el cruce y tocar un
+  // horario, "reservaPartido_.idPartido" de más abajo tiraría un
+  // TypeError sin capturar ("Cannot read properties of null") -- ni
+  // siquiera se armaría el pedido, y el jugador quedaría con los
+  // botones deshabilitados para siempre, sin ningún mensaje. Acá se
+  // corta ANTES de eso: se avisa y se manda de nuevo al paso de elegir
+  // cruce (nunca se llega a mandar un pedido con datos incompletos).
+  if (!reservaPartido_ || !reservaPartido_.idPartido) {
+    reservarIrAPaso_('cruce');
+    document.getElementById('rsvCruces').innerHTML =
+      '<p class="state-empty">Se perdió la selección del cruce. Elegilo de nuevo.</p>';
+    return;
+  }
+
+  reservaEnvioEnCurso_ = true;
 
   // Feedback inmediato al tocar: sin esto, mientras retenerTurno está en
   // vuelo (puede tardar varios segundos contra el backend real) la

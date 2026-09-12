@@ -1714,6 +1714,20 @@ function mp360ReservasListarPendientes_(datos) {
 // clics seguidos, dos pestañas del panel abiertas), el segundo encuentra
 // que ya no está PENDIENTE_APROBACION y se corta con un error claro, en
 // vez de procesar la misma reserva dos veces.
+// IDEMPOTENTE (agregado tras un caso real: el panel de Sheets aprobó una
+// reserva, la escritura se hizo bien, pero la respuesta se perdió en el
+// camino de vuelta -- el mismo tipo de fallo de entrega ya documentado y
+// resuelto para confirmarReserva, ver mp360ReservasConfirmar_). Antes,
+// un reintento con el mismo idReserva tras esa pérdida caía siempre en
+// "ya fue procesada", que un panel sin lógica especial mostraría como un
+// error aunque la aprobación ya se hubiera hecho bien. Ahora, si el
+// estado actual YA es exactamente el resultado que se estaba pidiendo,
+// se devuelve éxito con esos mismos datos en vez de fallar -- un
+// reintento nunca puede aprobar dos veces (sigue habiendo una sola
+// escritura real, la primera vez que el estado pasa de
+// PENDIENTE_APROBACION a RESERVADO) y nunca deja de detectar un
+// conflicto real (si el estado es otro distinto, como RECHAZADO o
+// CANCELADO, se sigue cortando con el error de siempre).
 function mp360ReservasAprobar_(datos) {
   datos = datos || {};
   if (!verificarClaveAdmin_(datos.clave)) throw new Error('Contraseña de administrador incorrecta.');
@@ -1728,6 +1742,9 @@ function mp360ReservasAprobar_(datos) {
     var fila = buscarFilaReservaPorId_(sh, idReserva);
     if (!fila) throw new Error('No se encontró esa reserva.');
     var estadoActual = normalizar_(sh.getRange(fila, COL_RESERVAS.ESTADO_RESERVA).getValue());
+    if (estadoActual === ESTADO_RESERVA_RESERVADO) {
+      return { ok: true, idReserva: idReserva, estadoReserva: ESTADO_RESERVA_RESERVADO };
+    }
     if (estadoActual !== ESTADO_RESERVA_PENDIENTE_APROBACION) {
       throw new Error('Esta reserva ya fue procesada (estado actual: ' + estadoActual + ').');
     }
@@ -1737,6 +1754,7 @@ function mp360ReservasAprobar_(datos) {
     lock.releaseLock();
   }
 }
+// Misma idempotencia que mp360ReservasAprobar_, ver ese comentario.
 function mp360ReservasRechazar_(datos) {
   datos = datos || {};
   if (!verificarClaveAdmin_(datos.clave)) throw new Error('Contraseña de administrador incorrecta.');
@@ -1751,6 +1769,9 @@ function mp360ReservasRechazar_(datos) {
     var fila = buscarFilaReservaPorId_(sh, idReserva);
     if (!fila) throw new Error('No se encontró esa reserva.');
     var estadoActual = normalizar_(sh.getRange(fila, COL_RESERVAS.ESTADO_RESERVA).getValue());
+    if (estadoActual === ESTADO_RESERVA_RECHAZADO) {
+      return { ok: true, idReserva: idReserva, estadoReserva: ESTADO_RESERVA_RECHAZADO };
+    }
     if (estadoActual !== ESTADO_RESERVA_PENDIENTE_APROBACION) {
       throw new Error('Esta reserva ya fue procesada (estado actual: ' + estadoActual + ').');
     }
