@@ -171,6 +171,39 @@ function leerCategoriaGuardada_() {
   try { return localStorage.getItem(LS_CATEGORIA_); } catch (e) { return null; }
 }
 
+// ============================================================
+// Caché de CATEGORIAS entre visitas (localStorage, "stale-while-revalidate")
+// ============================================================
+// CATEGORIAS casi no cambia (solo cuando el admin arma una liga nueva),
+// pero arrancarApp_ la pedía de cero en CADA carga de página vía
+// apiFetch('bootstrap') -- el jugador se quedaba mirando el selector de
+// categoría vacío varios segundos en cada visita, aunque fuera la MISMA
+// lista de siempre. Ahora, si hay una copia local de menos de
+// CATEGORIAS_CACHE_TTL_MS_, se usa para pintar el selector DE INMEDIATO,
+// sin esperar red. El pedido real a apiFetch('bootstrap') sigue
+// disparándose igual que antes, sin excepción -- sigue siendo la fuente
+// de verdad: cuando responde, pisa CATEGORIAS/categoriaActual con el dato
+// fresco (ver arrancarApp_) y vuelve a guardar la copia local. Si el
+// admin borra o agrega una categoría, el jugador la ve apenas esa
+// respuesta real llegue -- unos segundos más tarde, nunca más que eso.
+var LS_CATEGORIAS_CACHE_ = 'mp360_categorias_cache';
+var CATEGORIAS_CACHE_TTL_MS_ = 10 * 60 * 1000;
+function leerCategoriasCache_() {
+  try {
+    var raw = localStorage.getItem(LS_CATEGORIAS_CACHE_);
+    if (!raw) return null;
+    var obj = JSON.parse(raw);
+    if (!obj || !Array.isArray(obj.categorias) || !obj.ts) return null;
+    if (Date.now() - obj.ts > CATEGORIAS_CACHE_TTL_MS_) return null;
+    return obj.categorias;
+  } catch (e) { return null; }
+}
+function guardarCategoriasCache_(categorias) {
+  try {
+    localStorage.setItem(LS_CATEGORIAS_CACHE_, JSON.stringify({ categorias: categorias, ts: Date.now() }));
+  } catch (e) { /* storage no disponible: no rompe la app, solo no hay caché */ }
+}
+
 // "premios", "sobre-liga" y "contacto" son pantallas nuevas de este
 // rediseño; "sobre-liga" y "contacto" no piden nada al backend (son
 // contenido fijo editable directo en index.html), por eso no tienen
@@ -768,6 +801,16 @@ function reservasApiGet_(accion, params) {
   return reservasApiGetJson_(url).catch(function () { return reservasApiGetJsonp_(url); });
 }
 
+// respuestaDelBackend=true marca un error que es una respuesta REAL del
+// backend (payload {ok:false, error:"..."}) -- el pedido llegó, se
+// procesó, y la razón del rechazo es de negocio (retención vencida, cupo
+// ocupado, datos inválidos, etc.). Cualquier otro error (HTTP no-2xx,
+// timeout, corte de red, JSON roto) queda SIN esta marca: significa que
+// no sabemos si el pedido llegó a procesarse o no, así que es
+// potencialmente seguro reintentarlo en una acción idempotente (ver
+// confirmarReservaConReintento_ más abajo) -- nunca al revés: un error
+// marcado respuestaDelBackend NUNCA debe reintentarse solo, porque ya es
+// una respuesta definitiva y reintentar no cambiaría nada.
 function reservasApiPost_(accion, datos) {
   var url = RESERVAS_API_URL + '?accion=' + encodeURIComponent(accion);
   return fetchConTimeout_(url, {
@@ -780,7 +823,11 @@ function reservasApiPost_(accion, datos) {
       return r.json();
     })
     .then(function (payload) {
-      if (!payload || !payload.ok) throw new Error((payload && payload.error) || 'Error desconocido');
+      if (!payload || !payload.ok) {
+        var err = new Error((payload && payload.error) || 'Error desconocido');
+        err.respuestaDelBackend = true;
+        throw err;
+      }
       return payload.data;
     });
 }
@@ -826,7 +873,13 @@ function calentarReservasApi_() {
   }).catch(function () { /* esto es solo un ping de entrada en calor: si falla, no pasa nada */ });
 }
 
-var RSV_KEEPALIVE_MS_ = 4 * 60 * 1000; // 4 minutos
+// 6 minutos y no 4: bajo carga real (varias personas probando/reservando
+// a la vez) cada ping de "entrada en calor" es un pedido más compitiendo
+// por el mismo LockService/cuota que las acciones reales del jugador --
+// espaciarlo reduce ese ruido de fondo sin perder gran cosa: 6 minutos
+// sigue siendo bastante menos que lo que tarda Apps Script en "enfriarse"
+// del todo.
+var RSV_KEEPALIVE_MS_ = 6 * 60 * 1000; // 6 minutos
 function iniciarKeepAlive_() {
   setInterval(function () {
     // No gastar cuota de Apps Script con la pestaña en segundo plano --
@@ -1176,14 +1229,16 @@ document.getElementById('rsvConfirmarBtn').addEventListener('click', function ()
   btn.disabled = true;
   btn.textContent = 'Confirmando…';
 
-  reservasApiPost_('confirmarReserva', {
+  var payloadConfirmar = {
     idRetencion: reservaRetencion_.idRetencion,
     nombre: nombre,
     telefono: telefono,
     comprobanteBase64: reservaComprobante_.base64,
     comprobanteNombreArchivo: reservaComprobante_.nombreArchivo,
     comprobanteTipoMime: reservaComprobante_.tipoMime,
-  }).then(function (datos) {
+  };
+
+  confirmarReservaConReintento_(payloadConfirmar, btn).then(function (datos) {
     reservaEnvioEnCurso_ = false;
     if (reservaCountdownTimer_) { clearInterval(reservaCountdownTimer_); reservaCountdownTimer_ = null; }
     reservarPintarExito_(datos);
@@ -1195,6 +1250,39 @@ document.getElementById('rsvConfirmarBtn').addEventListener('click', function ()
     reservarMostrarErrorCheckout_((err && err.message) || 'No se pudo confirmar la reserva. Probá de nuevo.', true);
   });
 });
+
+// Reintento automático SOLO para confirmarReserva -- es la única acción de
+// escritura que el backend garantiza idempotente por idRetencion (ver
+// CodigoReservasAPI.gs, mp360ReservasConfirmar_ y
+// buscarReservaPorIdRetencionOrigen_): un segundo POST con el mismo
+// idRetencion nunca crea una reserva duplicada, devuelve la reserva ya
+// creada tal cual. Por eso acá es seguro reintentar automáticamente ante
+// un fallo de ENTREGA (HTTP 404 del redirect de Apps Script -- confirmado
+// en vivo esta misma investigación --, HTTP 5xx, timeout, corte de red):
+// no sabemos si el intento anterior llegó a procesarse, pero reintentar
+// con el MISMO idRetencion y el MISMO comprobante nunca genera una
+// segunda reserva. Un error marcado respuestaDelBackend (ver
+// reservasApiPost_) es una respuesta real y definitiva del servidor
+// (retención vencida, cupo ocupado, datos inválidos) -- ESO nunca se
+// reintenta solo, se muestra tal cual.
+// retenerTurno_ (elegir un turno) NO tiene este mismo reintento: no es
+// idempotente todavía, así que reintentarlo a ciegas podría generar dos
+// retenciones para el mismo turno. Si algún día hace falta, necesitaría
+// su propio diseño de idempotencia en el backend, igual que este.
+var RSV_CONFIRMAR_REINTENTOS_MS_ = [2000, 4000];
+function confirmarReservaConReintento_(payload, btn) {
+  function intentar(numIntento) {
+    return reservasApiPost_('confirmarReserva', payload).catch(function (err) {
+      if (err && err.respuestaDelBackend) throw err;
+      if (numIntento >= RSV_CONFIRMAR_REINTENTOS_MS_.length) throw err;
+      btn.textContent = 'Reintentando…';
+      return new Promise(function (resolve) {
+        setTimeout(resolve, RSV_CONFIRMAR_REINTENTOS_MS_[numIntento]);
+      }).then(function () { return intentar(numIntento + 1); });
+    });
+  }
+  return intentar(0);
+}
 
 // ---------- Paso final: éxito ----------
 var WHATSAPP_NUMERO_ADMIN_ = '5493516234487';
@@ -1700,9 +1788,25 @@ function arrancarApp_() {
   // para que la próxima acción real no le toque pagar un arranque en frío.
   iniciarKeepAlive_();
 
+  // Pintado inmediato del selector de categoría con la última lista
+  // conocida (localStorage, ver leerCategoriasCache_) mientras el
+  // bootstrap real todavía viaja -- así el selector no se queda vacío
+  // varios segundos en cada visita. Es solo un adelanto visual: el
+  // apiFetch('bootstrap') de abajo sigue siendo la fuente de verdad y
+  // pisa esto apenas responde (misma lógica de siempre, sin cambios).
+  var categoriasCacheadas = leerCategoriasCache_();
+  if (categoriasCacheadas && categoriasCacheadas.length) {
+    CATEGORIAS = categoriasCacheadas;
+    var guardadaCache = leerCategoriaGuardada_();
+    categoriaActual = (guardadaCache && CATEGORIAS.indexOf(guardadaCache) !== -1) ? guardadaCache : null;
+    actualizarSelectorInicio_();
+    precargarPantallasCategoria_(categoriaActual);
+  }
+
   apiFetch('bootstrap').then(function (boot) {
   boot = boot || {};
   CATEGORIAS = Array.isArray(boot.categorias) ? boot.categorias.filter(Boolean) : [];
+  guardarCategoriasCache_(CATEGORIAS);
 
   // Categoría guardada de una visita anterior: solo se respeta si sigue
   // existiendo en CATEGORIAS (la fuente de verdad real del backend).
