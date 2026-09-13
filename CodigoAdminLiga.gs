@@ -664,11 +664,19 @@ function generarRoundRobinIdaYVuelta_(parejas) {
   return rondasIda.concat(rondasVuelta);
 }
 
-// Única categoría (comparación EXACTA, sin normalizar mayúsculas) que
-// juega todos-contra-todos IDA Y VUELTA en vez de una sola vuelta. Para
-// agregar o quitar esta excepción más adelante, esta es la única línea
-// que hace falta tocar -- ver el uso en generarFixtureCategoria_.
-var CATEGORIA_IDA_Y_VUELTA = '7ma Femenino';
+// Categoría (comparación EXACTA, sin normalizar mayúsculas) que juega
+// todos-contra-todos IDA Y VUELTA en vez de una sola vuelta. Vacía = sin
+// excepción activa -- ninguna categoría coincide nunca con '', así que
+// generarFixtureCategoria_ usa generarRoundRobin_ (una sola rueda) para
+// todas. Para reactivar esta excepción más adelante, esta es la única
+// línea que hace falta tocar -- ver el uso en generarFixtureCategoria_.
+//
+// "7ma Femenino" usó esta excepción mientras tuvo 5 parejas (todos-contra-
+// todos ida y vuelta = 10 fechas). Al crecer a 7 parejas se decidió pasar
+// a una sola rueda (7 fechas, 3 partidos por fecha, 21 partidos totales)
+// -- generarRoundRobin_ ya arma exactamente eso solo, sin necesitar
+// ningún cambio de algoritmo, así que alcanzó con vaciar esta constante.
+var CATEGORIA_IDA_Y_VUELTA = '';
 
 function generarFixtureDesdeMenu() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -722,10 +730,9 @@ function generarFixtureCategoria_(ss, categoria) {
     borrarPartidosDeCategoria_(shPartidos, categoria);
   }
 
-  // Única excepción: "7ma Femenino" juega todos-contra-todos ida y
-  // vuelta (ver CATEGORIA_IDA_Y_VUELTA / generarRoundRobinIdaYVuelta_
-  // más arriba). Cualquier otra categoría sigue exactamente igual que
-  // antes, una sola vuelta con generarRoundRobin_.
+  // Excepción ida y vuelta (ver CATEGORIA_IDA_Y_VUELTA / generarRoundRobinIdaYVuelta_
+  // más arriba) -- hoy no hay ninguna categoría usándola (constante
+  // vacía), todas juegan una sola vuelta con generarRoundRobin_.
   var rondas = (categoria === CATEGORIA_IDA_Y_VUELTA)
     ? generarRoundRobinIdaYVuelta_(parejas)
     : generarRoundRobin_(parejas);
