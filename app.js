@@ -1603,10 +1603,10 @@ document.getElementById('buscarReservaBtn').addEventListener('click', function (
   reservasApiPost_('buscarReserva', { telefono: telefono, codigo: codigo }).then(function (datos) {
     reservaEnvioEnCurso_ = false;
     buscarReservaResetForm_();
-    // Deja el link bookmarkeable/recargable sin volver a pedir nada --
-    // no dispara ninguna navegación real, solo actualiza la barra de
-    // direcciones (reservarPintarGestion_ ya pinta todo client-side).
-    try { history.replaceState(null, '', location.pathname + '?token=' + encodeURIComponent(datos.tokenGestion)); } catch (e) { /* no crítico si el navegador lo bloquea */ }
+    // La búsqueda abre la gestión solo dentro de esta sesión. No dejamos
+    // ?token= pegado en la barra: si el jugador actualiza la página debe
+    // volver siempre a Inicio, no reaparecer en "Gestionar mi reserva".
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* no crítico */ }
     irA('reserva-gestion');
     reservarPintarGestion_(datos, datos.tokenGestion);
   }).catch(function (e) {
@@ -1856,6 +1856,12 @@ function arrancarRuteoInicial_(saltarRevalidacion) {
 function arrancarApp_() {
   var tokenGestion = reservaGestionToken_();
 
+  // Un link privado con ?token= se consume una sola vez. Limpiamos la
+  // URL inmediatamente para que F5/Actualizar vuelva a Inicio.
+  if (tokenGestion) {
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* no crítico */ }
+  }
+
   // La gestión de una reserva (link privado ?token=...) es independiente
   // del bootstrap deportivo de abajo (CATEGORIAS/novedades/sponsors, que
   // vive en API_URL / CodigoWebApp.gs): solo necesita la Reservas API. Se
@@ -1891,7 +1897,6 @@ function arrancarApp_() {
     var guardadaCache = leerCategoriaGuardada_();
     categoriaActual = (guardadaCache && CATEGORIAS.indexOf(guardadaCache) !== -1) ? guardadaCache : null;
     actualizarSelectorInicio_();
-    precargarPantallasCategoria_(categoriaActual);
   }
 
   apiFetch('bootstrap').then(function (boot) {
@@ -1913,11 +1918,9 @@ function arrancarApp_() {
   // del contenido de Inicio (novedades, sponsors, banner) falla.
   actualizarSelectorInicio_();
 
-  // Si ya había una categoría válida guardada, arrancamos a precargar
-  // Posiciones/Fixture/Resultados en segundo plano (no-op si no hay
-  // categoría: precargarPantallasCategoria_ corta sola).
-  precargarPantallasCategoria_(categoriaActual);
-
+  // Las pantallas deportivas cargan bajo demanda. Evitamos precargar
+  // tres endpoints apenas abre la app porque bajo carga real eso compite
+  // con la navegación que el jugador está intentando usar.
   try {
     renderInicio_(boot.inicio || {});
   } catch (e) {
