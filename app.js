@@ -1818,6 +1818,17 @@ document.addEventListener('click', function (e) {
 // normal). Un acceso ya guardado entra directo, sin red: la validación
 // contra el servidor pasa en segundo plano, sin bloquear nada (ver
 // arrancarRuteoInicial_).
+window.addEventListener('pageshow', function (e) {
+  // Safari/iPhone puede restaurar una pantalla completa desde memoria sin
+  // volver a ejecutar DOMContentLoaded. Si restaura "Tu reserva", la
+  // normalizamos a Inicio para que refrescar/navegar no quede atrapado.
+  if (!e.persisted) return;
+  try { history.replaceState(null, '', location.pathname); } catch (err) {}
+  if (document.getElementById('app') && !document.getElementById('app').hidden) {
+    irA('inicio');
+  }
+});
+
 window.addEventListener('DOMContentLoaded', function () {
   var guardado = leerAccesoGuardado_();
   if (guardado) {
@@ -1856,9 +1867,20 @@ function arrancarRuteoInicial_(saltarRevalidacion) {
 function arrancarApp_() {
   var tokenGestion = reservaGestionToken_();
 
-  // Un link privado con ?token= se consume una sola vez. Limpiamos la
-  // URL inmediatamente para que F5/Actualizar vuelva a Inicio.
-  if (tokenGestion) {
+  // Regla fuerte: actualizar/recargar SIEMPRE vuelve a Inicio, aunque
+  // Safari haya restaurado una entrada vieja con ?token= o el DOM de la
+  // pantalla de gestión desde su back-forward cache.
+  var fueRecarga = false;
+  try {
+    var nav = performance.getEntriesByType && performance.getEntriesByType('navigation');
+    fueRecarga = !!(nav && nav[0] && nav[0].type === 'reload');
+  } catch (e) {}
+  if (fueRecarga) tokenGestion = null;
+
+  // El token de un link privado se consume una sola vez y se limpia de
+  // la barra inmediatamente. En una recarga también limpiamos cualquier
+  // query vieja que Safari haya restaurado.
+  if (tokenGestion || fueRecarga) {
     try { history.replaceState(null, '', location.pathname); } catch (e) { /* no crítico */ }
   }
 
