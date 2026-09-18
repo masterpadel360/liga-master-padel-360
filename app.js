@@ -283,14 +283,23 @@ function renderScoreboard_(parejaA, parejaB, sets, ganador) {
 // Navegación
 // ============================================================
 function irA(pantalla) {
-  document.getElementById('screen-' + pantallaActual).hidden = true;
+  var destino = document.getElementById('screen-' + pantalla);
+  if (!destino) return;
+
+  // Si se toca la pantalla que ya está abierta, no volvemos a disparar
+  // toda su lógica/carga. Esto evita dobles pedidos por taps repetidos.
+  if (pantalla === pantallaActual && !destino.hidden) return;
+
+  var actual = document.getElementById('screen-' + pantallaActual);
+  if (actual) actual.hidden = true;
   pantallaActual = pantalla;
-  document.getElementById('screen-' + pantalla).hidden = false;
+  destino.hidden = false;
   document.querySelectorAll('.nav-item').forEach(function (el) {
     el.classList.toggle('active', el.getAttribute('data-nav') === NAV_GRUPO[pantalla]);
   });
   cargarPantalla_(pantalla);
-  document.getElementById('body').scrollTop = 0;
+  var body = document.getElementById('body');
+  if (body) body.scrollTop = 0;
 }
 
 document.addEventListener('click', function (e) {
@@ -327,14 +336,18 @@ function pintarChipsCategoria_(contId) {
   }).join('');
 }
 function elegirCategoria_(cat) {
+  if (!cat) return;
+  var cambioReal = (categoriaActual !== cat);
   categoriaActual = cat;
   document.querySelectorAll('.cat-chips .chip').forEach(function (c) {
     c.classList.toggle('active', c.getAttribute('data-cat') === categoriaActual);
   });
   guardarCategoriaElegida_(categoriaActual);
-  // Elegido el chip, el selector se cierra/compacta (patrón tap-para-
-  // desplegar: la próxima vez que haga falta elegir, arranca cerrado).
   actualizarSelectorInicio_(false);
+
+  // Un segundo tap sobre la misma categoría no debe volver a lanzar
+  // precargas ni repintados. Era una fuente fácil de pedidos duplicados.
+  if (!cambioReal) return;
   precargarPantallasCategoria_(categoriaActual);
   cargarPantalla_(pantallaActual);
 }
