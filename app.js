@@ -937,8 +937,10 @@ function calentarReservasApi_() {
 // sigue siendo bastante menos que lo que tarda Apps Script en "enfriarse"
 // del todo.
 var RSV_KEEPALIVE_MS_ = 6 * 60 * 1000; // 6 minutos
+var keepAliveTimer_ = null;
 function iniciarKeepAlive_() {
-  setInterval(function () {
+  if (keepAliveTimer_) return;
+  keepAliveTimer_ = setInterval(function () {
     // No gastar cuota de Apps Script con la pestaña en segundo plano --
     // ahí no hay ninguna acción real inminente que "proteger" del frío.
     if (document.visibilityState !== 'visible') return;
@@ -1847,19 +1849,13 @@ function arrancarApp_() {
     cargarReservaGestion_(tokenGestion);
   }
 
-  // Precarga en segundo plano de datos que NO dependen de categoría ni
-  // del bootstrap deportivo -- "mas" (Playoffs/Reglamento/Premios) y la
-  // disponibilidad de la Reservas API. Arrancan YA, en paralelo con todo
-  // lo demás, así que cuando el jugador toca "Más" o "Reservar turno" lo
-  // más probable es que ya estén resueltas (pedirConCache_ evita el
-  // pedido duplicado si la pantalla real se abre antes de que termine).
-  pedirConCache_('mas', function () { return apiFetch('mas'); }).catch(function () { /* cargarMas_ la pide de nuevo si hace falta */ });
-  pedirConCache_('disponibilidad', function () { return reservasApiGet_('disponibilidad', {}); }).then(function () { disponibilidadUltimoFetchTs_ = Date.now(); }).catch(function () { /* reservarCargarDisponibilidad_ la pide de nuevo si hace falta */ });
-
-  // Arranca ya (no hace falta esperar el bootstrap): mientras el jugador
-  // tenga la app abierta y a la vista, mantiene tibios los dos backends
-  // para que la próxima acción real no le toque pagar un arranque en frío.
-  iniciarKeepAlive_();
+  // Arranque liviano: antes se disparaban "mas" + disponibilidad de
+  // reservas + bootstrap al mismo tiempo. Esas llamadas competían con el
+  // fixture por Apps Script justo cuando el jugador recién entraba.
+  // Ahora solo bootstrap es crítico; las demás pantallas cargan cuando
+  // realmente se abren. El keep-alive arranca más tarde, cuando la carga
+  // inicial ya tuvo tiempo de terminar.
+  setTimeout(function () { iniciarKeepAlive_(); }, 12000);
 
   // Pintado inmediato del selector de categoría con la última lista
   // conocida (localStorage, ver leerCategoriasCache_) mientras el
