@@ -30,6 +30,7 @@ var API_TIMEOUT_MS_ = 15000;
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
 // ============================================================
+var apiPromesasUrl_ = {};
 function apiFetch(accion, params) {
   params = params || {};
   var qs = Object.keys(params).reduce(function (arr, k) {
@@ -40,7 +41,15 @@ function apiFetch(accion, params) {
   }, ['accion=' + encodeURIComponent(accion)]).join('&');
   var url = API_URL + '?' + qs;
 
-  return apiFetchJson_(url).catch(function () { return apiFetchJsonp_(url); });
+  // Última defensa contra pedidos idénticos simultáneos. Aunque dos
+  // partes distintas de la app lleguen a apiFetch con la misma URL,
+  // comparten una sola llamada real al backend.
+  if (apiPromesasUrl_[url]) return apiPromesasUrl_[url];
+  var p = apiFetchJson_(url).catch(function () { return apiFetchJsonp_(url); });
+  apiPromesasUrl_[url] = p;
+  function liberar() { if (apiPromesasUrl_[url] === p) delete apiPromesasUrl_[url]; }
+  p.then(liberar, liberar);
+  return p;
 }
 
 function apiFetchJson_(url) {
@@ -91,6 +100,28 @@ var categoriaActual = null;
 var pantallaActual = 'inicio';
 var cache_ = {};
 var fechaPorCategoria = {};
+
+// Cache local corto para Fixture: permite volver a entrar/recargar sin
+// esperar otra vez a Apps Script. La red sigue refrescando en segundo
+// plano, así que la planilla continúa siendo la fuente de verdad.
+var LS_FIXTURE_CACHE_ = 'mp360_fixture_cache_v1';
+var FIXTURE_CACHE_TTL_MS_ = 5 * 60 * 1000;
+function leerFixtureLocal_(cat) {
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_FIXTURE_CACHE_) || '{}');
+    var item = all[cat];
+    if (!item || !item.ts || !item.datos) return null;
+    if (Date.now() - item.ts > FIXTURE_CACHE_TTL_MS_) return null;
+    return item.datos;
+  } catch (e) { return null; }
+}
+function guardarFixtureLocal_(cat, datos) {
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_FIXTURE_CACHE_) || '{}');
+    all[cat] = { ts: Date.now(), datos: datos };
+    localStorage.setItem(LS_FIXTURE_CACHE_, JSON.stringify(all));
+  } catch (e) { /* cache opcional */ }
+}
 var fotosCache_ = [];
 var filtroFotoActual = 'Todas';
 
@@ -261,14 +292,23 @@ function renderScoreboard_(parejaA, parejaB, sets, ganador) {
 // Navegación
 // ============================================================
 function irA(pantalla) {
-  document.getElementById('screen-' + pantallaActual).hidden = true;
+  var destino = document.getElementById('screen-' + pantalla);
+  if (!destino) return;
+
+  // Si se toca la pantalla que ya está abierta, no volvemos a disparar
+  // toda su lógica/carga. Esto evita dobles pedidos por taps repetidos.
+  if (pantalla === pantallaActual && !destino.hidden) return;
+
+  var actual = document.getElementById('screen-' + pantallaActual);
+  if (actual) actual.hidden = true;
   pantallaActual = pantalla;
-  document.getElementById('screen-' + pantalla).hidden = false;
+  destino.hidden = false;
   document.querySelectorAll('.nav-item').forEach(function (el) {
     el.classList.toggle('active', el.getAttribute('data-nav') === NAV_GRUPO[pantalla]);
   });
   cargarPantalla_(pantalla);
-  document.getElementById('body').scrollTop = 0;
+  var body = document.getElementById('body');
+  if (body) body.scrollTop = 0;
 }
 
 document.addEventListener('click', function (e) {
@@ -305,14 +345,18 @@ function pintarChipsCategoria_(contId) {
   }).join('');
 }
 function elegirCategoria_(cat) {
+  if (!cat) return;
+  var cambioReal = (categoriaActual !== cat);
   categoriaActual = cat;
   document.querySelectorAll('.cat-chips .chip').forEach(function (c) {
     c.classList.toggle('active', c.getAttribute('data-cat') === categoriaActual);
   });
   guardarCategoriaElegida_(categoriaActual);
-  // Elegido el chip, el selector se cierra/compacta (patrón tap-para-
-  // desplegar: la próxima vez que haga falta elegir, arranca cerrado).
   actualizarSelectorInicio_(false);
+
+  // Un segundo tap sobre la misma categoría no debe volver a lanzar
+  // precargas ni repintados. Era una fuente fácil de pedidos duplicados.
+  if (!cambioReal) return;
   precargarPantallasCategoria_(categoriaActual);
   cargarPantalla_(pantallaActual);
 }
@@ -487,9 +531,26 @@ function cargarFotosInicio_() {
 // jugador la visite.
 function precargarPantallasCategoria_(cat) {
   if (!cat) return;
-  pedirConCache_('pos|' + cat, function () { return apiFetch('posiciones', { categoria: cat }); }).catch(function () { /* sin precarga, cargarPosiciones_ pide los datos igual */ });
-  pedirConCache_('fix|' + cat, function () { return apiFetch('fixture', { categoria: cat }); }).catch(function () { /* idem */ });
-  pedirConCache_('res|' + cat, function () { return apiFetch('resultados', { categoria: cat }); }).catch(function () { /* idem */ });
+
+  // Fixture tiene prioridad porque es la pantalla más consultada. Antes
+  // se lanzaban Posiciones + Fixture + Resultados al mismo tiempo y los
+  // tres competían por Apps Script. Ahora Fixture sale primero y las
+  // otras precargas esperan a que termine (bien o mal).
+  var claveFix = 'fix|' + cat;
+  var local = leerFixtureLocal_(cat);
+  if (local && !cache_[claveFix]) cache_[claveFix] = local;
+
+  pedirConCache_(claveFix, function () { return apiFetch('fixture', { categoria: cat }); })
+    .then(function (datos) { guardarFixtureLocal_(cat, datos); })
+    .catch(function () { /* la pantalla puede reintentar */ })
+    .then(function () {
+      pedirConCache_('pos|' + cat, function () { return apiFetch('posiciones', { categoria: cat }); })
+        .catch(function () {});
+      setTimeout(function () {
+        pedirConCache_('res|' + cat, function () { return apiFetch('resultados', { categoria: cat }); })
+          .catch(function () {});
+      }, 350);
+    });
 }
 
 // ============================================================
@@ -538,16 +599,34 @@ document.addEventListener('click', function (e) {
 function cargarFixture_() {
   var cat = categoriaActual; if (!cat) return;
   var clave = 'fix|' + cat;
+
+  // 1) memoria; 2) cache local; 3) red. Nunca dejamos una pantalla ya
+  // conocida en blanco solo porque Google está tardando.
   if (cache_[clave]) { renderFixture_(cache_[clave]); return; }
-  document.getElementById('fixMatches').innerHTML = '<div class="state-loading">Cargando…</div>';
+  var local = leerFixtureLocal_(cat);
+  if (local) {
+    cache_[clave] = local;
+    renderFixture_(local);
+    return;
+  }
+
+  document.getElementById('fixMatches').innerHTML = '<div class="state-loading">Cargando fixture…</div>';
   document.getElementById('fixFechas').innerHTML = '';
   pedirConCache_(clave, function () { return apiFetch('fixture', { categoria: cat }); }).then(function (datos) {
-    if (categoriaActual === cat) renderFixture_(datos);
+    guardarFixtureLocal_(cat, datos);
+    if (categoriaActual === cat && pantallaActual === 'fixture') renderFixture_(datos);
   }).catch(function () {
-    if (categoriaActual === cat) document.getElementById('fixMatches').innerHTML =
-      '<p class="state-empty">No se pudo cargar el fixture. Probá de nuevo en un momento.</p>';
+    if (categoriaActual === cat && pantallaActual === 'fixture') document.getElementById('fixMatches').innerHTML =
+      '<p class="state-empty">No se pudo cargar el fixture. <button type="button" class="chip" data-retry-fixture>Reintentar</button></p>';
   });
 }
+document.addEventListener('click', function (e) {
+  if (!e.target.closest('[data-retry-fixture]')) return;
+  var cat = categoriaActual; if (!cat) return;
+  delete cache_['fix|' + cat];
+  delete cachePromesas_['fix|' + cat];
+  cargarFixture_();
+});
 function renderFixture_(datos) {
   var contFechas = document.getElementById('fixFechas');
   var contM = document.getElementById('fixMatches');
@@ -880,8 +959,10 @@ function calentarReservasApi_() {
 // sigue siendo bastante menos que lo que tarda Apps Script en "enfriarse"
 // del todo.
 var RSV_KEEPALIVE_MS_ = 6 * 60 * 1000; // 6 minutos
+var keepAliveTimer_ = null;
 function iniciarKeepAlive_() {
-  setInterval(function () {
+  if (keepAliveTimer_) return;
+  keepAliveTimer_ = setInterval(function () {
     // No gastar cuota de Apps Script con la pestaña en segundo plano --
     // ahí no hay ninguna acción real inminente que "proteger" del frío.
     if (document.visibilityState !== 'visible') return;
@@ -1790,19 +1871,13 @@ function arrancarApp_() {
     cargarReservaGestion_(tokenGestion);
   }
 
-  // Precarga en segundo plano de datos que NO dependen de categoría ni
-  // del bootstrap deportivo -- "mas" (Playoffs/Reglamento/Premios) y la
-  // disponibilidad de la Reservas API. Arrancan YA, en paralelo con todo
-  // lo demás, así que cuando el jugador toca "Más" o "Reservar turno" lo
-  // más probable es que ya estén resueltas (pedirConCache_ evita el
-  // pedido duplicado si la pantalla real se abre antes de que termine).
-  pedirConCache_('mas', function () { return apiFetch('mas'); }).catch(function () { /* cargarMas_ la pide de nuevo si hace falta */ });
-  pedirConCache_('disponibilidad', function () { return reservasApiGet_('disponibilidad', {}); }).then(function () { disponibilidadUltimoFetchTs_ = Date.now(); }).catch(function () { /* reservarCargarDisponibilidad_ la pide de nuevo si hace falta */ });
-
-  // Arranca ya (no hace falta esperar el bootstrap): mientras el jugador
-  // tenga la app abierta y a la vista, mantiene tibios los dos backends
-  // para que la próxima acción real no le toque pagar un arranque en frío.
-  iniciarKeepAlive_();
+  // Arranque liviano: antes se disparaban "mas" + disponibilidad de
+  // reservas + bootstrap al mismo tiempo. Esas llamadas competían con el
+  // fixture por Apps Script justo cuando el jugador recién entraba.
+  // Ahora solo bootstrap es crítico; las demás pantallas cargan cuando
+  // realmente se abren. El keep-alive arranca más tarde, cuando la carga
+  // inicial ya tuvo tiempo de terminar.
+  setTimeout(function () { iniciarKeepAlive_(); }, 12000);
 
   // Pintado inmediato del selector de categoría con la última lista
   // conocida (localStorage, ver leerCategoriasCache_) mientras el
