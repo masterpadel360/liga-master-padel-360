@@ -91,6 +91,28 @@ var categoriaActual = null;
 var pantallaActual = 'inicio';
 var cache_ = {};
 var fechaPorCategoria = {};
+
+// Cache local corto para Fixture: permite volver a entrar/recargar sin
+// esperar otra vez a Apps Script. La red sigue refrescando en segundo
+// plano, así que la planilla continúa siendo la fuente de verdad.
+var LS_FIXTURE_CACHE_ = 'mp360_fixture_cache_v1';
+var FIXTURE_CACHE_TTL_MS_ = 5 * 60 * 1000;
+function leerFixtureLocal_(cat) {
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_FIXTURE_CACHE_) || '{}');
+    var item = all[cat];
+    if (!item || !item.ts || !item.datos) return null;
+    if (Date.now() - item.ts > FIXTURE_CACHE_TTL_MS_) return null;
+    return item.datos;
+  } catch (e) { return null; }
+}
+function guardarFixtureLocal_(cat, datos) {
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_FIXTURE_CACHE_) || '{}');
+    all[cat] = { ts: Date.now(), datos: datos };
+    localStorage.setItem(LS_FIXTURE_CACHE_, JSON.stringify(all));
+  } catch (e) { /* cache opcional */ }
+}
 var fotosCache_ = [];
 var filtroFotoActual = 'Todas';
 
@@ -487,9 +509,26 @@ function cargarFotosInicio_() {
 // jugador la visite.
 function precargarPantallasCategoria_(cat) {
   if (!cat) return;
-  pedirConCache_('pos|' + cat, function () { return apiFetch('posiciones', { categoria: cat }); }).catch(function () { /* sin precarga, cargarPosiciones_ pide los datos igual */ });
-  pedirConCache_('fix|' + cat, function () { return apiFetch('fixture', { categoria: cat }); }).catch(function () { /* idem */ });
-  pedirConCache_('res|' + cat, function () { return apiFetch('resultados', { categoria: cat }); }).catch(function () { /* idem */ });
+
+  // Fixture tiene prioridad porque es la pantalla más consultada. Antes
+  // se lanzaban Posiciones + Fixture + Resultados al mismo tiempo y los
+  // tres competían por Apps Script. Ahora Fixture sale primero y las
+  // otras precargas esperan a que termine (bien o mal).
+  var claveFix = 'fix|' + cat;
+  var local = leerFixtureLocal_(cat);
+  if (local && !cache_[claveFix]) cache_[claveFix] = local;
+
+  pedirConCache_(claveFix, function () { return apiFetch('fixture', { categoria: cat }); })
+    .then(function (datos) { guardarFixtureLocal_(cat, datos); })
+    .catch(function () { /* la pantalla puede reintentar */ })
+    .then(function () {
+      pedirConCache_('pos|' + cat, function () { return apiFetch('posiciones', { categoria: cat }); })
+        .catch(function () {});
+      setTimeout(function () {
+        pedirConCache_('res|' + cat, function () { return apiFetch('resultados', { categoria: cat }); })
+          .catch(function () {});
+      }, 350);
+    });
 }
 
 // ============================================================
@@ -538,16 +577,34 @@ document.addEventListener('click', function (e) {
 function cargarFixture_() {
   var cat = categoriaActual; if (!cat) return;
   var clave = 'fix|' + cat;
+
+  // 1) memoria; 2) cache local; 3) red. Nunca dejamos una pantalla ya
+  // conocida en blanco solo porque Google está tardando.
   if (cache_[clave]) { renderFixture_(cache_[clave]); return; }
-  document.getElementById('fixMatches').innerHTML = '<div class="state-loading">Cargando…</div>';
+  var local = leerFixtureLocal_(cat);
+  if (local) {
+    cache_[clave] = local;
+    renderFixture_(local);
+    return;
+  }
+
+  document.getElementById('fixMatches').innerHTML = '<div class="state-loading">Cargando fixture…</div>';
   document.getElementById('fixFechas').innerHTML = '';
   pedirConCache_(clave, function () { return apiFetch('fixture', { categoria: cat }); }).then(function (datos) {
-    if (categoriaActual === cat) renderFixture_(datos);
+    guardarFixtureLocal_(cat, datos);
+    if (categoriaActual === cat && pantallaActual === 'fixture') renderFixture_(datos);
   }).catch(function () {
-    if (categoriaActual === cat) document.getElementById('fixMatches').innerHTML =
-      '<p class="state-empty">No se pudo cargar el fixture. Probá de nuevo en un momento.</p>';
+    if (categoriaActual === cat && pantallaActual === 'fixture') document.getElementById('fixMatches').innerHTML =
+      '<p class="state-empty">No se pudo cargar el fixture. <button type="button" class="chip" data-retry-fixture>Reintentar</button></p>';
   });
 }
+document.addEventListener('click', function (e) {
+  if (!e.target.closest('[data-retry-fixture]')) return;
+  var cat = categoriaActual; if (!cat) return;
+  delete cache_['fix|' + cat];
+  delete cachePromesas_['fix|' + cat];
+  cargarFixture_();
+});
 function renderFixture_(datos) {
   var contFechas = document.getElementById('fixFechas');
   var contM = document.getElementById('fixMatches');
