@@ -30,6 +30,7 @@ var API_TIMEOUT_MS_ = 15000;
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
 // ============================================================
+var apiPromesasUrl_ = {};
 function apiFetch(accion, params) {
   params = params || {};
   var qs = Object.keys(params).reduce(function (arr, k) {
@@ -40,7 +41,15 @@ function apiFetch(accion, params) {
   }, ['accion=' + encodeURIComponent(accion)]).join('&');
   var url = API_URL + '?' + qs;
 
-  return apiFetchJson_(url).catch(function () { return apiFetchJsonp_(url); });
+  // Última defensa contra pedidos idénticos simultáneos. Aunque dos
+  // partes distintas de la app lleguen a apiFetch con la misma URL,
+  // comparten una sola llamada real al backend.
+  if (apiPromesasUrl_[url]) return apiPromesasUrl_[url];
+  var p = apiFetchJson_(url).catch(function () { return apiFetchJsonp_(url); });
+  apiPromesasUrl_[url] = p;
+  function liberar() { if (apiPromesasUrl_[url] === p) delete apiPromesasUrl_[url]; }
+  p.then(liberar, liberar);
+  return p;
 }
 
 function apiFetchJson_(url) {
