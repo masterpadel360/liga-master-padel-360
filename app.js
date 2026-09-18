@@ -1865,24 +1865,12 @@ function arrancarRuteoInicial_(saltarRevalidacion) {
 }
 
 function arrancarApp_() {
-  var tokenGestion = reservaGestionToken_();
-
-  // Regla fuerte: actualizar/recargar SIEMPRE vuelve a Inicio, aunque
-  // Safari haya restaurado una entrada vieja con ?token= o el DOM de la
-  // pantalla de gestión desde su back-forward cache.
-  var fueRecarga = false;
-  try {
-    var nav = performance.getEntriesByType && performance.getEntriesByType('navigation');
-    fueRecarga = !!(nav && nav[0] && nav[0].type === 'reload');
-  } catch (e) {}
-  if (fueRecarga) tokenGestion = null;
-
-  // El token de un link privado se consume una sola vez y se limpia de
-  // la barra inmediatamente. En una recarga también limpiamos cualquier
-  // query vieja que Safari haya restaurado.
-  if (tokenGestion || fueRecarga) {
-    try { history.replaceState(null, '', location.pathname); } catch (e) { /* no crítico */ }
-  }
+  // La app siempre arranca en Inicio. Safari/iPhone estaba restaurando
+  // ?token= y reabriendo "Tu reserva" incluso después de limpiar la URL.
+  // La gestión sigue disponible desde "Buscar mi reserva", pero un
+  // refresh nunca puede rutear automáticamente a esa pantalla.
+  var tokenGestion = null;
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* no crítico */ }
 
   // La gestión de una reserva (link privado ?token=...) es independiente
   // del bootstrap deportivo de abajo (CATEGORIAS/novedades/sponsors, que
@@ -1898,6 +1886,20 @@ function arrancarApp_() {
     irA('reserva-gestion');
     cargarReservaGestion_(tokenGestion);
   }
+
+  // Normalizar la pantalla visible antes de cualquier pedido de red.
+  // Así tampoco queda visible un DOM restaurado por Safari mientras
+  // bootstrap está cargando.
+  if (pantallaActual !== 'inicio') {
+    var vieja = document.getElementById('screen-' + pantallaActual);
+    if (vieja) vieja.hidden = true;
+    pantallaActual = 'inicio';
+  }
+  var inicio = document.getElementById('screen-inicio');
+  if (inicio) inicio.hidden = false;
+  document.querySelectorAll('.nav-item').forEach(function (el) {
+    el.classList.toggle('active', el.getAttribute('data-nav') === NAV_GRUPO.inicio);
+  });
 
   // Arranque liviano: antes se disparaban "mas" + disponibilidad de
   // reservas + bootstrap al mismo tiempo. Esas llamadas competían con el
