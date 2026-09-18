@@ -6,6 +6,9 @@
 <title>LIGA MASTER PÁDEL 360</title>
 <meta name="description" content="Liga Master Pádel 360 — Torneo Apertura 2026. Posiciones, fixture y resultados en vivo.">
 <meta name="theme-color" content="#0a0a0c">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -543,6 +546,28 @@
 
 </div>
 
-<script src="app.js"></script>
+<script>
+(function () {
+  // Guardia de arranque para Safari/iPhone: antes de cargar app.js
+  // restauramos visualmente Inicio y limpiamos queries privadas viejas.
+  try {
+    var qs = new URLSearchParams(location.search);
+    if (qs.has('token')) history.replaceState(null, '', location.pathname);
+  } catch (e) {}
+
+  var screens = document.querySelectorAll('.screen');
+  screens.forEach(function (el) { el.hidden = (el.id !== 'screen-inicio'); });
+  var inicio = document.getElementById('screen-inicio');
+  if (inicio) inicio.hidden = false;
+
+  window.addEventListener('pageshow', function () {
+    var gestion = document.getElementById('screen-reserva-gestion');
+    if (gestion) gestion.hidden = true;
+    var home = document.getElementById('screen-inicio');
+    if (home) home.hidden = false;
+  });
+})();
+</script>
+<script src="app.js?v=20260918-1735"></script>
 </body>
 </html>
