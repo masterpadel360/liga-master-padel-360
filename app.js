@@ -463,12 +463,20 @@ function renderInicio_(datos) {
   var sponsors = (Array.isArray(datos.sponsors) ? datos.sponsors : []).filter(Boolean);
 
   var elStatus = document.getElementById('hero-status');
-  if (datos.banner && datos.banner.titulo) {
-    elStatus.hidden = false;
-    elStatus.textContent = datos.banner.titulo;
-  } else {
-    elStatus.hidden = true;
+
+  // La fecha visible del Inicio avanza automáticamente cada domingo.
+  // Fecha 1 comenzó el lunes 14/09/2026; la Fecha 2 se habilita el
+  // domingo 20/09, la Fecha 3 el 27/09, etc. Así el cartel no depende
+  // del texto editorial viejo que venga en datos.banner.
+  var ahoraLiga = new Date();
+  var inicioFecha2 = new Date(2026, 8, 20);
+  inicioFecha2.setHours(0, 0, 0, 0);
+  var numeroFecha = 1;
+  if (ahoraLiga.getTime() >= inicioFecha2.getTime()) {
+    numeroFecha = 2 + Math.floor((ahoraLiga.getTime() - inicioFecha2.getTime()) / (7 * 24 * 60 * 60 * 1000));
   }
+  elStatus.hidden = false;
+  elStatus.textContent = 'FECHA ' + numeroFecha + ' EN JUEGO';
 
   document.getElementById('novedades').innerHTML = novedades.map(function (n) {
     return '<div class="news-card"><b>' + esc_(n.titulo) + '</b><span>' + esc_(n.texto) + '</span></div>';
