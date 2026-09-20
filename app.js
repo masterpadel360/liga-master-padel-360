@@ -466,12 +466,14 @@ function renderInicio_(datos) {
 
   // La fecha visible del Inicio avanza automáticamente cada domingo.
   // Domingo 20/09/2026 = Fecha 2; domingo 27/09 = Fecha 3, etc.
+  // Usamos fecha calendario (no horas transcurridas) para que cambios de
+  // horario/DST del navegador nunca adelanten una fecha por error.
   var hoy = new Date();
-  var inicioFecha2 = new Date(2026, 8, 20);
-  inicioFecha2.setHours(0, 0, 0, 0);
+  var hoyDia = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  var inicioFecha2Dia = Date.UTC(2026, 8, 20);
   var numeroFecha = 2;
-  if (hoy.getTime() >= inicioFecha2.getTime()) {
-    numeroFecha = 2 + Math.floor((hoy.getTime() - inicioFecha2.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  if (hoyDia >= inicioFecha2Dia) {
+    numeroFecha = 2 + Math.floor((hoyDia - inicioFecha2Dia) / (7 * 24 * 60 * 60 * 1000));
   }
   elStatus.hidden = false;
   elStatus.textContent = 'FECHA ' + numeroFecha + ' EN JUEGO';
