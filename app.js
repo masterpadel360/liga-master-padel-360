@@ -465,13 +465,13 @@ function renderInicio_(datos) {
   var elStatus = document.getElementById('hero-status');
 
   // La fecha visible del Inicio avanza automáticamente cada domingo.
-  // Domingo 20/09/2026 = Fecha 3; domingo 27/09 = Fecha 4, etc.
+  // Domingo 20/09/2026 = Fecha 2; domingo 27/09 = Fecha 3, etc.
   var hoy = new Date();
-  var inicioFecha3 = new Date(2026, 8, 20);
-  inicioFecha3.setHours(0, 0, 0, 0);
-  var numeroFecha = 3;
-  if (hoy.getTime() >= inicioFecha3.getTime()) {
-    numeroFecha = 3 + Math.floor((hoy.getTime() - inicioFecha3.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  var inicioFecha2 = new Date(2026, 8, 20);
+  inicioFecha2.setHours(0, 0, 0, 0);
+  var numeroFecha = 2;
+  if (hoy.getTime() >= inicioFecha2.getTime()) {
+    numeroFecha = 2 + Math.floor((hoy.getTime() - inicioFecha2.getTime()) / (7 * 24 * 60 * 60 * 1000));
   }
   elStatus.hidden = false;
   elStatus.textContent = 'FECHA ' + numeroFecha + ' EN JUEGO';
