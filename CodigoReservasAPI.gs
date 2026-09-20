@@ -1434,14 +1434,8 @@ function mp360ReservasConfirmar_(datos) {
       throw new Error('Ese cruce ya fue reservado por otra persona mientras completabas el formulario. Elegí otro turno.');
     }
 
-    // 3) Ninguna de las dos parejas juega ya otro partido esa misma
-    // semana de competencia, salvo excepción cargada por el admin.
-    var semana = numeroSemanaCompetencia_(retencion.fecha);
-    var chocaA = parejaTieneReservaEnSemana_(reservasActivas, partido.idParejaA, semana, retencion.idPartido);
-    var chocaB = parejaTieneReservaEnSemana_(reservasActivas, partido.idParejaB, semana, retencion.idPartido);
-    if ((chocaA || chocaB) && !existeExcepcionParaPartidoYSemana_(ss, retencion.idPartido, semana)) {
-      throw new Error('Una de las parejas de este cruce ya quedó con otro partido reservado esa semana mientras completabas el formulario. Consultá con el administrador si necesitás jugar dos veces esa semana.');
-    }
+    // 3) Se permite que una pareja tenga más de un partido en la misma semana.
+    // El mismo cruce sigue protegido por la validación anterior.
 
     // 4) Todavía hay una cancha físicamente libre en esa fecha+franja.
     var bloqueosDelDia = leerBloqueosDeFecha_(ss, retencion.fecha);
