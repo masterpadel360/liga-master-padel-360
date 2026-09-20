@@ -1220,8 +1220,11 @@ function mp360ReservasGetPartidosDisponibles(categoria) {
   var fechaEnJuego = leerFechaEnJuegoPorCategoria_(ss, categoria);
   if (fechaEnJuego === null) return [];
 
+  // FECHA EN JUEGO funciona como un límite superior: se habilitan los
+  // cruces PENDIENTES de la fecha actual y también cualquier pendiente
+  // arrastrado de fechas anteriores. Las fechas futuras siguen bloqueadas.
   var pendientes = leerPartidosPendientesDeCategoria_(ss, categoria)
-    .filter(function (p) { return p.fecha === fechaEnJuego; });
+    .filter(function (p) { return p.fecha <= fechaEnJuego; });
   var reservasActivas = leerReservasActivas_(ss);
   var retencionesVivas = leerRetencionesVivas_(ss);
 
