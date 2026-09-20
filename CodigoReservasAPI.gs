@@ -1274,12 +1274,9 @@ function mp360ReservasRetener_(datos) {
       retencionesVivas.some(function (r) { return r.idPartido === idPartido; });
     if (yaOcupado) throw new Error('Ese cruce ya tiene una reserva en curso. Elegí otro.');
 
-    var semana = numeroSemanaCompetencia_(fecha);
-    var chocaA = parejaTieneReservaEnSemana_(reservasActivas, partido.idParejaA, semana, idPartido);
-    var chocaB = parejaTieneReservaEnSemana_(reservasActivas, partido.idParejaB, semana, idPartido);
-    if ((chocaA || chocaB) && !existeExcepcionParaPartidoYSemana_(ss, idPartido, semana)) {
-      throw new Error('Una de las parejas de este cruce ya tiene otro partido reservado esa semana. Consultá con el administrador si necesitás jugar dos veces esa semana.');
-    }
+    // Se permite que una pareja juegue más de un partido en la misma semana.
+    // Esto habilita recuperar una fecha atrasada y jugar también la fecha actual.
+    // El mismo cruce sigue protegido por la validación yaOcupado de arriba.
 
     var bloqueosDelDia = leerBloqueosDeFecha_(ss, fecha);
     var ocupadas = contarOcupadasEnFranja_(reservasActivas, retencionesVivas, bloqueosDelDia, fecha, horarioInicio, horarioFin);
