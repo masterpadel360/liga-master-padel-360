@@ -1201,21 +1201,6 @@ function mp360ReservasGetDisponibilidad() {
 }
 
 // ============================================================
-// ACCIÓN: fechasEnJuego
-// ============================================================
-// Devuelve la FECHA EN JUEGO cargada manualmente en CATEGORIAS para cada
-// categoría. La portada usa este dato como única fuente de verdad.
-function mp360ReservasGetFechasEnJuego() {
-  var ss = abrirPlanilla_();
-  var categorias = leerCategorias_(ss);
-  var fechas = {};
-  categorias.forEach(function (categoria) {
-    fechas[categoria] = leerFechaEnJuegoPorCategoria_(ss, categoria);
-  });
-  return fechas;
-}
-
-// ============================================================
 // ACCIÓN: partidosDisponibles
 // ============================================================
 // Cruces PENDIENTES de una categoría que todavía se pueden reservar (no
@@ -1868,7 +1853,6 @@ function ejecutarAccion_(accion, e) {
   switch (accion) {
     case 'disponibilidad': return mp360ReservasGetDisponibilidad();
     case 'partidosDisponibles': return mp360ReservasGetPartidosDisponibles(params.categoria);
-    case 'fechasEnJuego': return mp360ReservasGetFechasEnJuego();
     case 'retenerTurno': return mp360ReservasRetener_(cuerpo || params);
     case 'confirmarReserva': return mp360ReservasConfirmar_(cuerpo || params);
     case 'consultarReserva': return mp360ReservasConsultar_(params.token);
