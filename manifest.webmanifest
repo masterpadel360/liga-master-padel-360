@@ -1,13 +1,13 @@
 {
-  "name": "Liga Master Pádel 360",
-  "short_name": "Master Pádel",
+  "name": "Liga 360",
+  "short_name": "Liga 360",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0a0a0c",
   "theme_color": "#0a0a0c",
   "icons": [
     {
-      "src": "app-icon.svg",
+      "src": "liga360-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
