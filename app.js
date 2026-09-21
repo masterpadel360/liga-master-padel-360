@@ -1662,18 +1662,16 @@ document.getElementById('accesoBtn').addEventListener('click', function () {
   var btn = this;
   btn.disabled = true;
   btn.textContent = 'Verificando…';
-  reservasApiPost_('verificarAcceso', { clave: clave }).then(function (r) {
+  // El acceso es una lectura liviana: usamos GET+JSONP de respaldo.
+  // En iPhone el POST directo a Apps Script podía quedarse esperando
+  // hasta 25 s aunque el backend estuviera sano. GET permite caer al
+  // respaldo JSONP y evita que la pantalla de entrada quede clavada.
+  reservasApiGet_('verificarAcceso', { clave: clave }).then(function (r) {
     btn.disabled = false;
     btn.textContent = 'ENTRAR A LA LIGA';
     guardarAcceso_(r.token, r.version);
     document.getElementById('access-gate').hidden = true;
     document.getElementById('app').hidden = false;
-    // true = saltar la revalidación: el token que acabamos de guardar lo
-    // emitió el servidor hace un instante, contra la contraseña que el
-    // jugador tipeó recién -- no puede estar desactualizado todavía, así
-    // que volver a pedirle al servidor que lo revalide (validarTokenAcceso)
-    // acá sería un pedido de red 100% redundante compitiendo por cuota con
-    // el bootstrap real que arranca a continuación.
     arrancarRuteoInicial_(true);
   }).catch(function (e) {
     btn.disabled = false;
