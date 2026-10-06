@@ -1390,7 +1390,7 @@ function confirmarReservaConReintento_(payload, btn) {
 }
 
 // ---------- Paso final: éxito ----------
-var WHATSAPP_NUMERO_ADMIN_ = '5493516234487';
+var WHATSAPP_NUMERO_ADMIN_ = '5493512154487';
 // El mensaje va prearmado en la URL de wa.me -- WhatsApp lo abre listo
 // para tocar enviar, nunca lo manda solo (así lo pidieron a propósito:
 // le sirve al jugador para tener el código guardado en su propio chat, y
