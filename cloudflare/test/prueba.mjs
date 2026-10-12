@@ -281,6 +281,23 @@ console.log('9) Protección al re-importar');
 const reimp = await api('importar', A({ datos: datosImport }));
 check(reimp.ok === false && reimp.error.includes('no están en la planilla'), 'no pisa reservas nuevas', reimp.error);
 
+console.log('11) Publicar: reiniciar todo como está en la planilla');
+const antesG = await ok('adminGrilla', A());
+check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');
+const reini = await ok('importar', A({ datos: datosImport, forzar: true, reiniciarTodo: true }));
+check(reini && reini.reiniciado === true, 'importar con reiniciarTodo');
+const g2 = await ok('adminGrilla', A());
+check(g2.clases.length === 13, 'clases fijas vuelven a las originales', g2.clases.length);
+check(g2.turnosEspeciales.length === 0, 'turnos especiales de prueba borrados');
+const bd = (sql) => DB.prepare(sql).first();
+check((await bd('SELECT COUNT(*) AS n FROM grilla')).n === 19, 'grilla semanal original (19 turnos)');
+check((await bd("SELECT valor FROM config WHERE clave = 'valor_turno'")).valor === '36000', 'precio original');
+check((await bd('SELECT COUNT(*) AS n FROM archivos')).n === 0 && (await bd("SELECT COUNT(*) AS n FROM fotos WHERE url LIKE 'archivo:%'")).n === 0, 'fotos y comprobantes de prueba borrados');
+check((await bd('SELECT COUNT(*) AS n FROM reservas')).n === datosImport.reservas.length, 'reservas = solo las de la planilla');
+check((await bd('SELECT COUNT(*) AS n FROM fotos')).n === datosImport.galeria.filter((f) => String(f.activo).toUpperCase() === 'SI').length, 'galería = la de la planilla');
+const pos11 = await ok('posiciones', { categoria: datosImport.categorias[0].nombre }, 'GET');
+check(pos11 !== null, 'la app sigue respondiendo después de reiniciar');
+
 await Promise.all(pendientesWaitUntil);
 console.log('\nResultado: ' + oks + ' OK, ' + fallas + ' con problemas');
 process.exit(fallas ? 1 : 0);

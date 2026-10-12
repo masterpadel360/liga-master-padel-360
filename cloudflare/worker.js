@@ -1463,12 +1463,30 @@ async function aImportar(c) {
     db.prepare(`INSERT INTO sponsors (nombre, logo_url, link, orden, destacado, activo) SELECT json_extract(value,'$.nombre'), json_extract(value,'$.logo'), json_extract(value,'$.link'), json_extract(value,'$.orden'), json_extract(value,'$.destacado'), 1 FROM json_each(?)`).bind(J(sponsors)),
     db.prepare(`INSERT INTO fotos (categoria, titulo, url, orden, creado_ts) SELECT json_extract(value,'$.categoria'), json_extract(value,'$.titulo'), json_extract(value,'$.url'), json_extract(value,'$.orden'), ? FROM json_each(?)`).bind(Date.now(), J(fotos)),
   ];
+  // reiniciarTodo: además deja horarios, clases, precios y archivos como al principio
+  // (borra todo lo que se haya cargado durante las pruebas).
+  if (c.datos.reiniciarTodo) {
+    stmts.push(
+      db.prepare('DELETE FROM turnos_fecha'),
+      db.prepare('DELETE FROM clases'),
+      db.prepare(`INSERT INTO clases (dia, inicio, fin, canchas, profe) SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]'),
+        json_extract(value,'$[2]'), 1, json_extract(value,'$[3]') FROM json_each(?)`).bind(J(CLASES_INICIALES)),
+      db.prepare('DELETE FROM grilla'),
+      db.prepare(`INSERT INTO grilla (dia, inicio, fin, canchas) SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]'),
+        json_extract(value,'$[2]'), json_extract(value,'$[3]') FROM json_each(?)`).bind(J(GRILLA_INICIAL)),
+      db.prepare("DELETE FROM config WHERE clave <> 'clases_sembradas'"),
+      db.prepare(`INSERT INTO config (clave, valor) SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]') FROM json_each(?)`).bind(J(CONFIG_INICIAL)),
+      db.prepare("DELETE FROM fotos"),
+      db.prepare("DELETE FROM archivos"),
+      db.prepare(`INSERT INTO fotos (categoria, titulo, url, orden, creado_ts) SELECT json_extract(value,'$.categoria'), json_extract(value,'$.titulo'), json_extract(value,'$.url'), json_extract(value,'$.orden'), ? FROM json_each(?)`).bind(Date.now(), J(fotos)),
+    );
+  }
   if (typeof d.playoffsMensaje === 'string' && d.playoffsMensaje.trim()) {
     stmts.push(db.prepare("INSERT INTO config (clave, valor) VALUES ('playoffs_mensaje', ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor").bind(d.playoffsMensaje.trim()));
   }
   await db.batch(stmts);
   return {
-    importado: true,
+    importado: true, reiniciado: !!c.datos.reiniciarTodo,
     categorias: categorias.length, parejas: parejas.length, partidos: partidos.length, jugados: partidos.filter((p) => p.estado === JUGADO).length,
     reservas: res.length, bloqueos: bloqueos.length, contenido: contenido.length, sponsors: sponsors.length, fotos: fotos.length,
   };
@@ -1498,6 +1516,19 @@ async function servirArchivo(c) {
 // Puesta al día automática de la base (tablas/columnas nuevas)
 // =====================================================================
 // Corre una sola vez por instancia del Worker; si ya está todo, no hace nada.
+// Valores originales (los de la planilla / Apps Script). Se usan al reiniciar todo.
+const GRILLA_INICIAL = [
+  [1,'18:00','19:30',2],[1,'19:30','21:00',2],[1,'21:00','22:30',3],
+  [2,'10:30','12:00',2],[2,'18:00','19:30',2],[2,'19:30','21:00',2],[2,'21:00','22:30',3],
+  [3,'18:00','19:30',2],[3,'19:30','21:00',2],[3,'21:00','22:30',3],
+  [4,'10:30','12:00',3],[4,'18:00','19:30',2],[4,'19:30','21:00',2],[4,'21:00','22:30',3],
+  [5,'18:00','19:30',2],[5,'19:30','21:00',2],[5,'21:00','22:30',3],
+  [6,'09:30','11:00',3],[6,'11:00','12:30',3],
+];
+const CONFIG_INICIAL = [
+  ['valor_turno', '36000'], ['monto_sena', '9000'], ['alias', 'masterpadel.360'], ['ventana_dias', '14'],
+  ['retencion_minutos', '10'], ['cantidad_canchas', '3'], ['fecha_inicio_liga', '2026-09-14'], ['playoffs_mensaje', ''],
+];
 const CLASES_INICIALES = [
   // Gabriel
   [2, '19:00', '21:00', 'Gabriel'], [3, '19:00', '21:00', 'Gabriel'], [4, '19:00', '21:00', 'Gabriel'],
