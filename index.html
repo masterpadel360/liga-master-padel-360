@@ -453,6 +453,17 @@
         <div class="rsv-exito-ic">⏳</div>
         <h2 class="rsv-panel-title center">Solicitud enviada</h2>
         <p class="rsv-pendiente-note">Tu turno quedó bloqueado y está pendiente de aprobación.</p>
+
+        <!-- Aviso bien visible: sin el WhatsApp el organizador no se entera -->
+        <div class="rsv-wa-alerta" id="rsvWaAlerta">
+          <b class="rsv-wa-titulo" id="rsvWaTitulo">⚠️ ATENCIÓN: FALTA UN PASO</b>
+          <p class="rsv-wa-texto" id="rsvWaTexto">Mandá tu reserva por WhatsApp para que el organizador la vea y la apruebe.</p>
+          <a class="rsv-whatsapp-btn is-destacado" id="rsvWhatsappLink" href="#" target="_blank" rel="noopener">
+            <svg class="ic" aria-hidden="true"><use href="#icon-whatsapp"/></svg>
+            <span>ENVIAR RESERVA POR WHATSAPP</span>
+          </a>
+        </div>
+
         <div class="rsv-summary" id="rsv-exito-resumen"></div>
 
         <div class="rsv-codigo-card">
@@ -461,12 +472,6 @@
           <button class="rsv-copy-btn" id="rsvCopyCodigo" type="button">Copiar código</button>
         </div>
         <p class="rsv-privado-note">Guardá este código para volver a acceder a tu reserva.</p>
-
-        <a class="rsv-whatsapp-btn" id="rsvWhatsappLink" href="#" target="_blank" rel="noopener">
-          <svg class="ic" aria-hidden="true"><use href="#icon-whatsapp"/></svg>
-          <span>ENVIAR RESERVA POR WHATSAPP</span>
-        </a>
-        <p class="hint-line">Así nos llega el aviso y te queda el código guardado en el chat.</p>
 
         <a class="doc-card-btn" id="rsvGestionarLink" href="#">Gestionar mi reserva</a>
         <p class="rsv-privado-note">Este enlace es privado y personal. No lo compartas.</p>

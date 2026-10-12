@@ -201,8 +201,63 @@ async function leerGrilla(db) {
   for (const f of filas) (g[f.dia] = g[f.dia] || []).push({ id: f.id, inicio: f.inicio, fin: f.fin, canchas: f.canchas });
   return g;
 }
-function franjaDe(grilla, fecha, inicio, fin) {
-  return (grilla[diaSemana(fecha)] || []).find((f) => f.inicio === inicio && f.fin === fin) || null;
+// Clases fijas semanales (tuyas y de los profes). Ocupan canchas y por eso
+// limitan cuántas quedan para la liga en cada turno.
+async function leerClases(db) {
+  const filas = await todos(db, 'SELECT * FROM clases ORDER BY dia, inicio');
+  const porDia = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  for (const f of filas) (porDia[f.dia] = porDia[f.dia] || []).push(f);
+  return { lista: filas, porDia };
+}
+// Turnos especiales cargados para una fecha puntual (ej: "este sábado de 9 a 21").
+async function leerTurnosFecha(db, desde, hasta) {
+  const filas = await todos(db, 'SELECT * FROM turnos_fecha WHERE fecha BETWEEN ? AND ? ORDER BY fecha, inicio', desde, hasta);
+  const t = {};
+  for (const f of filas) (t[f.fecha] = t[f.fecha] || []).push(f);
+  return t;
+}
+// Máximo de canchas ocupadas A LA VEZ por clases dentro de un horario
+// (dos clases seguidas en la misma cancha, ej. 15-19 y 19-21, cuentan 1).
+function clasesSimultaneas(clasesDia, ini, fin) {
+  const rel = (clasesDia || []).filter((k) => seSuperponen(k.inicio, k.fin, ini, fin));
+  let max = 0;
+  const puntos = [ini].concat(rel.map((k) => (k.inicio > ini ? k.inicio : ini)));
+  for (const p of puntos) {
+    let n = 0;
+    for (const k of rel) if (k.inicio <= p && p < k.fin) n += Number(k.canchas) || 1;
+    if (n > max) max = n;
+  }
+  return max;
+}
+function libresSegunClases(cfg, clasesDia, ini, fin) {
+  return Math.max(0, cfg.cantidadCanchas - clasesSimultaneas(clasesDia, ini, fin));
+}
+async function cargarBase(db, desde, hasta, cfg) {
+  const [c, grilla, clases, turnos] = await Promise.all([cfg ? cfg : leerConfig(db), leerGrilla(db), leerClases(db), leerTurnosFecha(db, desde, hasta)]);
+  return { cfg: c, grilla, clases, turnos };
+}
+// Turnos ofrecidos un día puntual = los de la semana + los especiales de esa
+// fecha. "cap" = canchas para la liga: lo configurado, pero nunca más de lo
+// que dejan libre las clases fijas de ese día.
+function franjasDeFecha(base, fecha) {
+  const dia = diaSemana(fecha);
+  const clasesDia = base.clases.porDia[dia] || [];
+  const out = [];
+  for (const f of base.grilla[dia] || []) out.push({ inicio: f.inicio, fin: f.fin, canchas: f.canchas, especial: false });
+  for (const f of base.turnos[fecha] || []) {
+    const ya = out.find((x) => x.inicio === f.inicio && x.fin === f.fin);
+    if (ya) { ya.canchas = Math.max(ya.canchas, f.canchas); ya.especial = true; ya.idEspecial = f.id; }
+    else out.push({ inicio: f.inicio, fin: f.fin, canchas: f.canchas, especial: true, idEspecial: f.id });
+  }
+  out.sort((a, b) => a.inicio.localeCompare(b.inicio) || a.fin.localeCompare(b.fin));
+  for (const f of out) {
+    f.porClases = libresSegunClases(base.cfg, clasesDia, f.inicio, f.fin);
+    f.cap = Math.min(f.canchas, f.porClases);
+  }
+  return out;
+}
+function franjaDe(base, fecha, inicio, fin) {
+  return franjasDeFecha(base, fecha).find((f) => f.inicio === inicio && f.fin === fin) || null;
 }
 function ventanaReservable(cfg) {
   const hoy = hoyISO();
@@ -333,7 +388,9 @@ function roundRobin(parejas) {
 async function aBootstrap(c) {
   const cats = await categoriasOrdenadas(c.db);
   const [novedades, sponsors] = await Promise.all([leerNovedades(c), leerSponsorsActivos(c)]);
-  return { categorias: cats.map((x) => x.nombre), inicio: { novedades, sponsors } };
+  const fechasEnJuego = {};
+  for (const x of cats) fechasEnJuego[x.nombre] = x.fecha_en_juego;
+  return { categorias: cats.map((x) => x.nombre), fechasEnJuego, inicio: { novedades, sponsors } };
 }
 async function aCategorias(c) {
   return (await categoriasOrdenadas(c.db)).map((x) => x.nombre);
@@ -438,10 +495,11 @@ async function aValidarTokenAcceso(c) {
 // ACCIONES PÚBLICAS — reservas
 // =====================================================================
 async function aDisponibilidad(c) {
-  const [cfg, grilla] = await Promise.all([leerConfig(c.db), leerGrilla(c.db)]);
+  const cfg = await leerConfig(c.db);
   const { minimo, maximo } = ventanaReservable(cfg);
   const corte = Date.now() - cfg.retencionMinutos * 60000;
-  const [reservas, retenciones, bloqueos] = await Promise.all([
+  const [base, reservas, retenciones, bloqueos] = await Promise.all([
+    cargarBase(c.db, minimo, maximo, cfg),
     todos(c.db, `SELECT fecha, hora_inicio, hora_fin FROM reservas WHERE fecha BETWEEN ? AND ? AND ${ACTIVA_SQL}`, minimo, maximo),
     todos(c.db, 'SELECT fecha, hora_inicio, hora_fin FROM retenciones WHERE fecha BETWEEN ? AND ? AND creada_ts > ?', minimo, maximo, corte),
     todos(c.db, 'SELECT fecha, hora_inicio, hora_fin, cancha FROM bloqueos WHERE fecha BETWEEN ? AND ?', minimo, maximo),
@@ -449,10 +507,10 @@ async function aDisponibilidad(c) {
   const dias = [];
   for (let f = minimo; f <= maximo; f = sumarDias(f, 1)) {
     const franjas = [];
-    for (const fr of grilla[diaSemana(f)] || []) {
+    for (const fr of franjasDeFecha(base, f)) {
       if (franjaYaEmpezo(f, fr.inicio)) continue;
       const ocupadas = contarOcupadas(cfg, reservas, retenciones, bloqueos, f, fr.inicio, fr.fin);
-      const disponibles = Math.max(0, fr.canchas - ocupadas);
+      const disponibles = Math.max(0, fr.cap - ocupadas);
       if (disponibles > 0) franjas.push({ inicio: fr.inicio, fin: fr.fin, disponibles });
     }
     if (franjas.length) dias.push({ fecha: f, diaSemana: NOMBRES_DIA[diaSemana(f)], franjas });
@@ -502,11 +560,11 @@ async function aRetenerTurno(c) {
   const idPartido = txt(d.idPartido), fecha = txt(d.fecha);
   const inicio = normalizarHora(d.horarioInicio), fin = normalizarHora(d.horarioFin);
   if (!idPartido || !esFechaISO(fecha) || !esHora(inicio) || !esHora(fin)) falla('Faltan datos para retener el turno.');
-  const [cfg, grilla] = await Promise.all([leerConfig(c.db), leerGrilla(c.db)]);
+  const cfg = await leerConfig(c.db);
   const { minimo, maximo } = ventanaReservable(cfg);
   if (fecha < minimo || fecha > maximo) falla('Esa fecha está fuera de la ventana de reserva permitida.');
-  const franja = franjaDe(grilla, fecha, inicio, fin);
-  if (!franja) falla('Ese horario no es un turno válido para ese día.');
+  const franja = franjaDe(await cargarBase(c.db, fecha, fecha, cfg), fecha, inicio, fin);
+  if (!franja || franja.cap < 1) falla('Ese horario no es un turno válido para ese día.');
   if (franjaYaEmpezo(fecha, inicio)) falla('Ese turno ya empezó. Elegí otro horario.');
 
   const partido = await datosPartido(c.db, idPartido);
@@ -532,7 +590,7 @@ async function aRetenerTurno(c) {
       + (SELECT COUNT(*) FROM retenciones WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin AND creada_ts > ?7)
       + (SELECT COALESCE(SUM(CASE WHEN UPPER(cancha) = 'TODAS' THEN ?9 ELSE 1 END), 0) FROM bloqueos WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin)
       ) < ?8`,
-    idRetencion, fecha, inicio, fin, idPartido, ahora, corte, franja.canchas, cfg.cantidadCanchas);
+    idRetencion, fecha, inicio, fin, idPartido, ahora, corte, franja.cap, cfg.cantidadCanchas);
 
   if (!res.meta || res.meta.changes !== 1) {
     const ocupado = await uno(c.db, `SELECT
@@ -706,7 +764,55 @@ async function aAdminLogin(c) {
   return { tokenAdmin: await crearTokenAdmin(c.env) };
 }
 
-function formatoReservaAdmin(c, r, tokenAdmin) {
+// ---------- Pagos por jugador ----------
+// Cada reserva la pagan 4 jugadores en partes iguales. La seña ya cubre la
+// parte de quien reservó; el organizador va tildando a los otros 3.
+function sinAcentos(t) { return txt(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function jugadoresDe(r) {
+  const a = txt(r.pareja_a).split(' / '), b = txt(r.pareja_b).split(' / ');
+  return [a[0], a[1], b[0], b[1]].map((x) => txt(x));
+}
+function adivinarSena(nombre, jugadores) {
+  const palabras = sinAcentos(nombre).split(/\s+/).filter((w) => w.length >= 3);
+  let mejor = null, puntos = 0;
+  jugadores.forEach((j, i) => {
+    const pj = sinAcentos(j).split(/\s+/);
+    const n = palabras.filter((w) => pj.includes(w)).length;
+    if (n > puntos) { puntos = n; mejor = i; }
+  });
+  return mejor;
+}
+function estadoPagos(r) {
+  const jugadores = jugadoresDe(r);
+  let p = null;
+  try { p = r.pagos ? JSON.parse(r.pagos) : null; } catch (e) { p = null; }
+  if (!p || !Array.isArray(p.j)) {
+    const todos = r.estado_pago === PAGO_COMPLETO;
+    p = { j: [todos, todos, todos, todos], sena: adivinarSena(r.nombre, jugadores) };
+    if (p.sena !== null && p.sena !== undefined) p.j[p.sena] = true;
+  }
+  const pagados = [0, 1, 2, 3].map((i) => !!p.j[i]);
+  return { jugadores, pagados, sena: p.sena === undefined ? null : p.sena };
+}
+function guardarPagosSql(db, r, pagos) {
+  const n = pagos.pagados.filter(Boolean).length;
+  const monto = Math.round((r.valor_total * n) / 4);
+  return db.prepare('UPDATE reservas SET pagos = ?, monto_pagado = ?, estado_pago = ? WHERE id = ?')
+    .bind(JSON.stringify({ j: pagos.pagados, sena: pagos.sena }), monto, n === 4 ? PAGO_COMPLETO : SALDO_PENDIENTE, r.id);
+}
+async function mapaPartidosDe(db, reservas) {
+  const ids = [...new Set(reservas.map((r) => r.id_partido).filter(Boolean))];
+  const m = {};
+  for (let i = 0; i < ids.length; i += 90) {
+    const lote = ids.slice(i, i + 90);
+    const filas = await todos(db, 'SELECT * FROM partidos WHERE id IN (' + lote.map(() => '?').join(',') + ')', ...lote);
+    for (const p of filas) m[p.id] = p;
+  }
+  return m;
+}
+function formatoReservaAdmin(c, r, tokenAdmin, partidos) {
+  const pt = partidos && partidos[r.id_partido];
+  const pagos = estadoPagos(r);
   return {
     ...formatoReservaJugador(r),
     codigoReserva: r.codigo, idPartido: r.id_partido,
@@ -716,6 +822,8 @@ function formatoReservaAdmin(c, r, tokenAdmin) {
       : txt(r.comprobante_url),
     fechaCreacion: r.creada_ts ? new Date(r.creada_ts).toISOString() : '',
     aprobadaTs: r.aprobada_ts, rechazadaTs: r.rechazada_ts, canceladaTs: r.cancelada_ts,
+    jugadores: pagos.jugadores, pagados: pagos.pagados, senaIndice: pagos.sena,
+    partido: pt ? { estado: pt.estado, set1: pt.set1, set2: pt.set2, set3: pt.set3, ganadorId: pt.ganador_id, parejaAId: pt.pareja_a_id, parejaBId: pt.pareja_b_id } : null,
   };
 }
 async function tokenParaLinks(c) {
@@ -730,6 +838,11 @@ async function aListarPendientes(c) {
   return filas.map((r) => formatoReservaAdmin(c, r, t));
 }
 
+async function contarPorCerrar(db) {
+  const filas = await todos(db, `SELECT * FROM reservas WHERE aprobada_ts IS NOT NULL AND ${ACTIVA_SQL} AND fecha <= ?`, hoyISO());
+  const partidos = await mapaPartidosDe(db, filas);
+  return filas.filter((r) => etapaReserva(r, partidos[r.id_partido]) === 'porcerrar').length;
+}
 async function aAdminResumen(c) {
   await exigirAdmin(c);
   const hoy = hoyISO();
@@ -745,22 +858,38 @@ async function aAdminResumen(c) {
     leerConfig(c.db),
   ]);
   return {
-    hoy, pendientes: pend.n, proximas: prox.n, config: cfg,
+    hoy, pendientes: pend.n, proximas: prox.n, porCerrar: await contarPorCerrar(c.db), config: cfg,
     categorias: cats.map((x) => ({ nombre: x.nombre, fechaEnJuego: x.fecha_en_juego, parejasActivas: x.parejas_activas, partidos: x.partidos, jugados: x.jugados, ultimaFecha: x.ultima_fecha })),
   };
 }
 
+// Etapas de una reserva para el organizador:
+//   pendientes  -> para aprobar
+//   proximas    -> confirmadas que todavía no se jugaron
+//   porcerrar   -> ya se jugaron pero falta algún pago o el resultado
+//   completas   -> jugadas, pagadas al 100% y con resultado
+//   rechazadas  -> las que rechazó el organizador
+//   historial   -> todas
+function etapaReserva(r, partido) {
+  const e = estadoReserva(r);
+  if (e === EST.PENDIENTE_APROBACION) return 'pendientes';
+  if (e === EST.RESERVADO) return 'proximas';
+  if (e === EST.RECHAZADO) return 'rechazadas';
+  if (e === EST.CANCELADO) return 'canceladas';
+  const pagado = estadoPagos(r).pagados.every(Boolean);
+  return pagado && partido && partido.estado === JUGADO ? 'completas' : 'porcerrar';
+}
 async function aAdminReservas(c) {
   await exigirAdmin(c);
   const t = await tokenParaLinks(c);
   const filtro = txt(c.datos.filtro) || 'pendientes';
-  const hoy = hoyISO();
   let filas;
   if (filtro === 'pendientes') {
     filas = await todos(c.db, 'SELECT * FROM reservas WHERE aprobada_ts IS NULL AND rechazada_ts IS NULL AND cancelada_ts IS NULL ORDER BY creada_ts');
-  } else if (filtro === 'proximas') {
-    filas = await todos(c.db, 'SELECT * FROM reservas WHERE aprobada_ts IS NOT NULL AND rechazada_ts IS NULL AND cancelada_ts IS NULL AND fecha >= ? ORDER BY fecha, hora_inicio, cancha', hoy);
-    filas = filas.filter((r) => estadoReserva(r) === EST.RESERVADO);
+  } else if (filtro === 'rechazadas') {
+    filas = await todos(c.db, 'SELECT * FROM reservas WHERE rechazada_ts IS NOT NULL ORDER BY rechazada_ts DESC LIMIT 400');
+  } else if (filtro === 'proximas' || filtro === 'porcerrar' || filtro === 'completas') {
+    filas = await todos(c.db, `SELECT * FROM reservas WHERE aprobada_ts IS NOT NULL AND ${ACTIVA_SQL} ORDER BY fecha, hora_inicio, cancha`);
   } else {
     const q = txt(c.datos.q).toLowerCase();
     filas = await todos(c.db, 'SELECT * FROM reservas ORDER BY fecha DESC, hora_inicio DESC LIMIT 400');
@@ -769,7 +898,12 @@ async function aAdminReservas(c) {
       filas = filas.filter((r) => [r.nombre, r.pareja_a, r.pareja_b, r.codigo, r.categoria, r.id].join(' ').toLowerCase().includes(q) || (qd.length >= 4 && soloDigitos(r.telefono).includes(qd)));
     }
   }
-  return filas.map((r) => formatoReservaAdmin(c, r, t));
+  const partidos = await mapaPartidosDe(c.db, filas);
+  if (filtro === 'proximas' || filtro === 'porcerrar' || filtro === 'completas') {
+    filas = filas.filter((r) => etapaReserva(r, partidos[r.id_partido]) === filtro);
+    if (filtro !== 'proximas') filas.reverse(); // las más recientes primero
+  }
+  return filas.map((r) => ({ ...formatoReservaAdmin(c, r, t, partidos), etapa: etapaReserva(r, partidos[r.id_partido]) }));
 }
 
 async function cambiarEstadoReserva(c, campo, estadoObjetivo) {
@@ -806,13 +940,24 @@ async function aAdminMarcarPago(c) {
   const id = txt(c.datos.idReserva);
   const r = await uno(c.db, 'SELECT * FROM reservas WHERE id = ?', id);
   if (!r) falla('No se encontró esa reserva.');
-  const cfg = await leerConfig(c.db);
-  if (c.datos.completo) {
-    await ejecutar(c.db, 'UPDATE reservas SET monto_pagado = valor_total, estado_pago = ? WHERE id = ?', PAGO_COMPLETO, id);
-  } else {
-    await ejecutar(c.db, 'UPDATE reservas SET monto_pagado = ?, estado_pago = ? WHERE id = ?', Math.min(cfg.montoSena, r.valor_total), SALDO_PENDIENTE, id);
-  }
-  return { ok: true };
+  const pagos = estadoPagos(r);
+  pagos.pagados = pagos.pagados.map((v, i) => (c.datos.completo ? true : i === pagos.sena));
+  await guardarPagosSql(c.db, r, pagos).run();
+  return { ok: true, pagados: pagos.pagados };
+}
+// Tilda o destilda el pago de un jugador (0-1: pareja A, 2-3: pareja B).
+// esSena = true marca a ese jugador como quien pagó la seña.
+async function aAdminPagoJugador(c) {
+  await exigirAdmin(c);
+  const id = txt(c.datos.idReserva), i = Number(c.datos.indice);
+  if (!(i >= 0 && i <= 3)) falla('Jugador inválido.');
+  const r = await uno(c.db, 'SELECT * FROM reservas WHERE id = ?', id);
+  if (!r) falla('No se encontró esa reserva.');
+  const pagos = estadoPagos(r);
+  if (c.datos.esSena) { pagos.sena = i; pagos.pagados[i] = true; }
+  else pagos.pagados[i] = !!c.datos.pagado;
+  await guardarPagosSql(c.db, r, pagos).run();
+  return { ok: true, pagados: pagos.pagados, senaIndice: pagos.sena, completo: pagos.pagados.every(Boolean) };
 }
 
 // Agenda: día por día, cada franja con quién juega en qué cancha.
@@ -821,32 +966,37 @@ async function aAdminAgenda(c) {
   const desde = esFechaISO(txt(c.datos.desde)) ? txt(c.datos.desde) : hoyISO();
   const dias = Math.min(Math.max(Number(c.datos.dias) || 7, 1), 31);
   const hasta = sumarDias(desde, dias - 1);
-  const [cfg, grilla, reservas, bloqueos] = await Promise.all([
-    leerConfig(c.db), leerGrilla(c.db),
+  const [base, reservas, bloqueos] = await Promise.all([
+    cargarBase(c.db, desde, hasta),
     todos(c.db, `SELECT * FROM reservas WHERE fecha BETWEEN ? AND ? AND ${ACTIVA_SQL} ORDER BY fecha, hora_inicio, cancha`, desde, hasta),
     todos(c.db, 'SELECT * FROM bloqueos WHERE fecha BETWEEN ? AND ? ORDER BY fecha, hora_inicio', desde, hasta),
   ]);
+  const cfg = base.cfg;
   const t = await tokenParaLinks(c);
+  const partidos = await mapaPartidosDe(c.db, reservas);
+  const fmtB = (b) => ({ id: b.id, fecha: b.fecha, horaInicio: b.hora_inicio, horaFin: b.hora_fin, cancha: b.cancha, motivo: b.motivo });
   const salida = [];
   for (let f = desde; f <= hasta; f = sumarDias(f, 1)) {
     const resDia = reservas.filter((r) => r.fecha === f);
     const bloqDia = bloqueos.filter((b) => b.fecha === f);
     const usadas = new Set();
-    const franjas = (grilla[diaSemana(f)] || []).map((fr) => {
+    const franjas = franjasDeFecha(base, f).map((fr) => {
       const rs = resDia.filter((r) => seSuperponen(r.hora_inicio, r.hora_fin, fr.inicio, fr.fin));
       rs.forEach((r) => usadas.add(r.id));
       const bs = bloqDia.filter((b) => seSuperponen(b.hora_inicio, b.hora_fin, fr.inicio, fr.fin));
       const ocupadas = contarOcupadas(cfg, rs, [], bs, f, fr.inicio, fr.fin);
       return {
-        inicio: fr.inicio, fin: fr.fin, canchas: fr.canchas, libres: Math.max(0, fr.canchas - ocupadas),
-        reservas: rs.map((r) => formatoReservaAdmin(c, r, t)),
-        bloqueos: bs.map((b) => ({ id: b.id, horaInicio: b.hora_inicio, horaFin: b.hora_fin, cancha: b.cancha, motivo: b.motivo })),
+        inicio: fr.inicio, fin: fr.fin, canchas: fr.cap, especial: fr.especial, idEspecial: fr.idEspecial || null,
+        libres: Math.max(0, fr.cap - ocupadas),
+        reservas: rs.map((r) => formatoReservaAdmin(c, r, t, partidos)),
+        bloqueos: bs.map(fmtB),
       };
     });
     salida.push({
       fecha: f, diaSemana: NOMBRES_DIA[diaSemana(f)], franjas,
-      otras: resDia.filter((r) => !usadas.has(r.id)).map((r) => formatoReservaAdmin(c, r, t)),
-      bloqueos: bloqDia.map((b) => ({ id: b.id, horaInicio: b.hora_inicio, horaFin: b.hora_fin, cancha: b.cancha, motivo: b.motivo })),
+      clases: (base.clases.porDia[diaSemana(f)] || []).map((k) => ({ id: k.id, inicio: k.inicio, fin: k.fin, canchas: k.canchas, profe: k.profe })),
+      otras: resDia.filter((r) => !usadas.has(r.id)).map((r) => formatoReservaAdmin(c, r, t, partidos)),
+      bloqueos: bloqDia.map(fmtB),
     });
   }
   return { desde, hasta, dias: salida, cantidadCanchas: cfg.cantidadCanchas };
@@ -1007,8 +1157,19 @@ async function aAdminEliminarBloqueo(c) {
 }
 async function aAdminGrilla(c) {
   await exigirAdmin(c);
-  const g = await leerGrilla(c.db);
-  return { dias: [1, 2, 3, 4, 5, 6, 0].map((dia) => ({ dia, nombre: NOMBRES_DIA[dia], franjas: g[dia] || [] })) };
+  const hoy = hoyISO();
+  const base = await cargarBase(c.db, hoy, sumarDias(hoy, 120));
+  const turnos = [];
+  for (const f of Object.keys(base.turnos).sort()) for (const t of base.turnos[f]) turnos.push({ id: t.id, fecha: t.fecha, inicio: t.inicio, fin: t.fin, canchas: t.canchas });
+  return {
+    cantidadCanchas: base.cfg.cantidadCanchas,
+    clases: base.clases.lista.map((k) => ({ id: k.id, dia: k.dia, inicio: k.inicio, fin: k.fin, canchas: k.canchas, profe: k.profe })),
+    turnosEspeciales: turnos,
+    dias: [1, 2, 3, 4, 5, 6, 0].map((dia) => ({
+      dia, nombre: NOMBRES_DIA[dia],
+      franjas: (base.grilla[dia] || []).map((f) => ({ ...f, porClases: libresSegunClases(base.cfg, base.clases.porDia[dia], f.inicio, f.fin) })),
+    })),
+  };
 }
 async function aAdminGuardarGrilla(c) {
   await exigirAdmin(c);
@@ -1045,6 +1206,101 @@ async function aAdminGuardarConfig(c) {
   }
   if (stmts.length) await c.db.batch(stmts);
   return leerConfig(c.db);
+}
+
+// ---------- Clases fijas (tuyas y de los profes) ----------
+function validarHorario(ini, fin, que) {
+  if (!esHora(ini) || !esHora(fin) || fin <= ini) falla('Revisá el horario' + (que ? ' de ' + que : '') + ': "hasta" tiene que ser después de "desde".');
+}
+async function aAdminClases(c) {
+  await exigirAdmin(c);
+  return (await leerClases(c.db)).lista;
+}
+async function aAdminGuardarClase(c) {
+  await exigirAdmin(c);
+  const d = c.datos, cfg = await leerConfig(c.db);
+  const dia = Number(d.dia), ini = normalizarHora(d.inicio), fin = normalizarHora(d.fin), canchas = Number(d.canchas) || 1;
+  if (!(dia >= 0 && dia <= 6)) falla('Elegí el día.');
+  validarHorario(ini, fin, 'la clase');
+  if (!(canchas >= 1 && canchas <= cfg.cantidadCanchas)) falla('Las canchas van de 1 a ' + cfg.cantidadCanchas + '.');
+  const profe = txt(d.profe).substring(0, 60);
+  if (d.id) {
+    await ejecutar(c.db, 'UPDATE clases SET dia = ?, inicio = ?, fin = ?, canchas = ?, profe = ? WHERE id = ?', dia, ini, fin, canchas, profe, Number(d.id));
+    return { id: Number(d.id) };
+  }
+  const f = await uno(c.db, 'INSERT INTO clases (dia, inicio, fin, canchas, profe) VALUES (?, ?, ?, ?, ?) RETURNING id', dia, ini, fin, canchas, profe);
+  return { id: f.id };
+}
+async function aAdminEliminarClase(c) {
+  await exigirAdmin(c);
+  await ejecutar(c.db, 'DELETE FROM clases WHERE id = ?', Number(c.datos.id));
+  return { ok: true };
+}
+
+// ---------- Turnos especiales para una fecha ----------
+// Arma los turnos de un día (ej. sábado de 9 a 21 cada 90') y calcula
+// cuántas canchas quedan libres en cada uno según clases y bloqueos.
+async function calcularTurnosDia(c, fecha, desde, hasta, duracion) {
+  if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
+  validarHorario(desde, hasta);
+  const dur = Math.max(30, Math.min(180, Number(duracion) || 90));
+  const [base, bloqueos] = await Promise.all([
+    cargarBase(c.db, fecha, fecha),
+    todos(c.db, 'SELECT * FROM bloqueos WHERE fecha = ?', fecha),
+  ]);
+  const clasesDia = base.clases.porDia[diaSemana(fecha)] || [];
+  const existentes = franjasDeFecha(base, fecha);
+  const aMin = (h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+  const aHora = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const out = [];
+  for (let m = aMin(desde); m + dur <= aMin(hasta); m += dur) {
+    const ini = aHora(m), fin = aHora(m + dur);
+    let libres = libresSegunClases(base.cfg, clasesDia, ini, fin);
+    for (const b of bloqueos) if (seSuperponen(b.hora_inicio, b.hora_fin, ini, fin)) libres -= mayus(b.cancha) === 'TODAS' ? base.cfg.cantidadCanchas : 1;
+    const ya = existentes.find((f) => seSuperponen(f.inicio, f.fin, ini, fin));
+    out.push({ inicio: ini, fin, libres: Math.max(0, libres), choca: ya ? ya.inicio + '–' + ya.fin : '' });
+  }
+  if (!out.length) falla('Entre esos horarios no entra ningún turno de ' + dur + ' minutos.');
+  return { fecha, diaSemana: NOMBRES_DIA[diaSemana(fecha)], cantidadCanchas: base.cfg.cantidadCanchas, turnos: out };
+}
+async function aAdminCalcularTurnos(c) {
+  await exigirAdmin(c);
+  const d = c.datos;
+  return calcularTurnosDia(c, txt(d.fecha), normalizarHora(d.desde), normalizarHora(d.hasta), d.duracion);
+}
+async function aAdminCrearTurnosFecha(c) {
+  await exigirAdmin(c);
+  const fecha = txt(c.datos.fecha);
+  if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
+  const cfg = await leerConfig(c.db);
+  const turnos = (Array.isArray(c.datos.turnos) ? c.datos.turnos : []).map((t) => {
+    const ini = normalizarHora(t.inicio), fin = normalizarHora(t.fin), canchas = Number(t.canchas);
+    validarHorario(ini, fin);
+    if (!(canchas >= 1 && canchas <= cfg.cantidadCanchas)) falla('Las canchas van de 1 a ' + cfg.cantidadCanchas + '.');
+    return { fecha, inicio: ini, fin, canchas };
+  });
+  if (!turnos.length) falla('No hay turnos para agregar.');
+  await ejecutar(c.db, `INSERT INTO turnos_fecha (fecha, inicio, fin, canchas) SELECT json_extract(value,'$.fecha'), json_extract(value,'$.inicio'),
+    json_extract(value,'$.fin'), json_extract(value,'$.canchas') FROM json_each(?)`, JSON.stringify(turnos));
+  return { agregados: turnos.length };
+}
+async function aAdminEliminarTurnoFecha(c) {
+  await exigirAdmin(c);
+  await ejecutar(c.db, 'DELETE FROM turnos_fecha WHERE id = ?', Number(c.datos.id));
+  return { ok: true };
+}
+
+// ---------- Bloqueos: editar / mover ----------
+async function aAdminEditarBloqueo(c) {
+  await exigirAdmin(c);
+  const d = c.datos, cfg = await leerConfig(c.db);
+  const fecha = txt(d.fecha), ini = normalizarHora(d.horaInicio), fin = normalizarHora(d.horaFin), cancha = mayus(d.cancha) || 'TODAS';
+  if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
+  validarHorario(ini, fin);
+  if (cancha !== 'TODAS' && !(Number(cancha) >= 1 && Number(cancha) <= cfg.cantidadCanchas)) falla('Elegí una cancha válida.');
+  const res = await ejecutar(c.db, 'UPDATE bloqueos SET fecha = ?, hora_inicio = ?, hora_fin = ?, cancha = ?, motivo = ? WHERE id = ?', fecha, ini, fin, cancha, txt(d.motivo).substring(0, 120), txt(d.id));
+  if (res.meta.changes !== 1) falla('No se encontró ese bloqueo.');
+  return { ok: true };
 }
 
 // ---------- Contenido ----------
@@ -1235,6 +1491,43 @@ async function servirArchivo(c) {
 }
 
 // =====================================================================
+// Puesta al día automática de la base (tablas/columnas nuevas)
+// =====================================================================
+// Corre una sola vez por instancia del Worker; si ya está todo, no hace nada.
+const CLASES_INICIALES = [
+  // Gabriel
+  [2, '19:00', '21:00', 'Gabriel'], [3, '19:00', '21:00', 'Gabriel'], [4, '19:00', '21:00', 'Gabriel'],
+  // Pepi
+  [2, '15:00', '19:00', 'Pepi'], [4, '15:00', '19:00', 'Pepi'],
+  // Dani
+  [1, '19:00', '20:00', 'Dani'], [2, '09:00', '11:00', 'Dani'], [3, '08:00', '09:00', 'Dani'], [3, '15:00', '19:00', 'Dani'],
+  [4, '15:30', '16:30', 'Dani'], [5, '08:00', '09:00', 'Dani'], [5, '15:00', '18:00', 'Dani'], [5, '19:00', '20:00', 'Dani'],
+];
+let ESQUEMA_AL_DIA = false;
+async function asegurarEsquema(db) {
+  if (ESQUEMA_AL_DIA) return;
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS clases (id INTEGER PRIMARY KEY AUTOINCREMENT, dia INTEGER NOT NULL, inicio TEXT NOT NULL,
+      fin TEXT NOT NULL, canchas INTEGER NOT NULL DEFAULT 1, profe TEXT NOT NULL DEFAULT '')`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS turnos_fecha (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, inicio TEXT NOT NULL,
+      fin TEXT NOT NULL, canchas INTEGER NOT NULL)`),
+  ]);
+  const col = await db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('reservas') WHERE name = 'pagos'").first();
+  if (!col || !col.n) {
+    try { await db.prepare("ALTER TABLE reservas ADD COLUMN pagos TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* ya existía */ }
+  }
+  const sembradas = await db.prepare("SELECT valor FROM config WHERE clave = 'clases_sembradas'").first();
+  if (!sembradas) {
+    await db.batch([
+      db.prepare(`INSERT INTO clases (dia, inicio, fin, canchas, profe) SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]'),
+        json_extract(value,'$[2]'), 1, json_extract(value,'$[3]') FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM clases)`).bind(JSON.stringify(CLASES_INICIALES)),
+      db.prepare("INSERT OR IGNORE INTO config (clave, valor) VALUES ('clases_sembradas', '1')"),
+    ]);
+  }
+  ESQUEMA_AL_DIA = true;
+}
+
+// =====================================================================
 // Router
 // =====================================================================
 const ACCIONES = {
@@ -1251,7 +1544,10 @@ const ACCIONES = {
   adminFechaEnJuego: aAdminFechaEnJuego, adminFechaEnJuegoTodas: aAdminFechaEnJuegoTodas,
   adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminCrearCategoria: aAdminCrearCategoria,
   adminEliminarCategoria: aAdminEliminarCategoria, adminGenerarFixture: aAdminGenerarFixture,
-  adminBloqueos: aAdminBloqueos, adminCrearBloqueo: aAdminCrearBloqueo, adminEliminarBloqueo: aAdminEliminarBloqueo,
+  adminBloqueos: aAdminBloqueos, adminCrearBloqueo: aAdminCrearBloqueo, adminEliminarBloqueo: aAdminEliminarBloqueo, adminEditarBloqueo: aAdminEditarBloqueo,
+  adminClases: aAdminClases, adminGuardarClase: aAdminGuardarClase, adminEliminarClase: aAdminEliminarClase,
+  adminCalcularTurnos: aAdminCalcularTurnos, adminCrearTurnosFecha: aAdminCrearTurnosFecha, adminEliminarTurnoFecha: aAdminEliminarTurnoFecha,
+  adminPagoJugador: aAdminPagoJugador,
   adminGrilla: aAdminGrilla, adminGuardarGrilla: aAdminGuardarGrilla, adminGuardarConfig: aAdminGuardarConfig,
   adminContenido: aAdminContenido, adminGuardarContenido: aAdminGuardarContenido, adminEliminarContenido: aAdminEliminarContenido,
   adminGuardarSponsor: aAdminGuardarSponsor, adminEliminarSponsor: aAdminEliminarSponsor,
@@ -1288,6 +1584,7 @@ export default {
     const c = { env, ctx, db: env.DB, datos, origen: url.origin };
 
     if (!env.DB) return responder({ ok: false, error: 'Falta conectar la base de datos (binding "DB").' }, params.callback);
+    try { await asegurarEsquema(env.DB); } catch (e) { console.error('asegurarEsquema', e && e.stack ? e.stack : e); }
     if (accion === 'archivo') {
       try { return await servirArchivo(c); } catch (e) { return new Response('Error', { status: 500, headers: CORS }); }
     }

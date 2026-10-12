@@ -205,6 +205,65 @@ check(fotoPub.status === 200 && fotoPub.headers.get('Cache-Control').includes('i
 await ok('adminGuardarSponsor', A({ nombre: 'Nuevo Sponsor', destacado: true, orden: 1 }));
 check((await ok('sponsors', {}, 'GET')).destacado.nombre === 'Nuevo Sponsor', 'cambiar sponsor destacado');
 
+console.log('10) Clases fijas, turnos especiales, pagos por jugador y etapas');
+const cls = await ok('adminClases', A());
+check(cls.length === 13 && cls.some((k) => k.profe === 'Gabriel' && k.dia === 3), 'clases de los profes cargadas solas', cls.length);
+const g0 = await ok('adminGrilla', A());
+const mar = (gg) => gg.dias.find((d) => d.dia === 2);
+check(mar(g0).franjas.find((f) => f.inicio === '18:00').porClases === 2, 'martes 18:00: Pepi 15-19 y Gabriel 19-21 seguidas = 1 cancha ocupada → 2 libres', mar(g0).franjas);
+check(mar(g0).franjas.find((f) => f.inicio === '21:00').porClases === 3, 'martes 21:00: sin clases → 3 libres');
+const nuevaClase = await ok('adminGuardarClase', A({ dia: 2, inicio: '21:00', fin: '22:00', canchas: 2, profe: 'Recupero' }));
+check(mar(await ok('adminGrilla', A())).franjas.find((f) => f.inicio === '21:00').porClases === 1, 'agregar clase de 2 canchas deja 1 libre');
+await ok('adminGuardarClase', A({ id: nuevaClase.id, dia: 2, inicio: '22:30', fin: '23:30', canchas: 2, profe: 'Recupero' }));
+check(mar(await ok('adminGrilla', A())).franjas.find((f) => f.inicio === '21:00').porClases === 3, 'mover la clase libera el turno');
+await ok('adminEliminarClase', A({ id: nuevaClase.id }));
+check((await api('adminGuardarClase', A({ dia: 2, inicio: '22:00', fin: '21:00' }))).ok === false, 'clase con horario al revés se rechaza');
+// sábado dentro de la ventana
+let sab = hoy; while (new Date(sab + 'T12:00:00Z').getUTCDay() !== 6) sab = masDias(Math.round((Date.parse(sab) - Date.parse(hoy)) / 864e5) + 1);
+const calc = await ok('adminCalcularTurnos', A({ fecha: sab, desde: '09:00', hasta: '21:00', duracion: 90 }));
+check(calc.turnos.length === 8 && calc.turnos[0].inicio === '09:00' && calc.turnos[7].fin === '21:00', 'sábado 9 a 21 → 8 turnos de 90 minutos', calc.turnos.map((t) => t.inicio));
+check(calc.turnos.find((t) => t.inicio === '09:00').choca === '09:30–11:00', 'avisa si se pisa con un turno de la semana', calc.turnos[0]);
+const nuevos = calc.turnos.filter((t) => !t.choca).map((t) => ({ inicio: t.inicio, fin: t.fin, canchas: t.libres }));
+await ok('adminCrearTurnosFecha', A({ fecha: sab, turnos: nuevos }));
+const dSab = (await ok('disponibilidad', {}, 'GET')).dias.find((d) => d.fecha === sab);
+check(dSab && dSab.franjas.some((f) => f.inicio === '18:00'), 'el sábado ya ofrece turnos a la tarde', dSab && dSab.franjas.map((f) => f.inicio));
+const ge = await ok('adminGrilla', A());
+check(ge.turnosEspeciales.length === nuevos.length, 'turnos especiales listados');
+const retSab = await ok('retenerTurno', { idPartido: (await ok('partidosDisponibles', { categoria: '7ma Masculino' }, 'GET'))[0].idPartido, fecha: sab, horarioInicio: '18:00', horarioFin: '19:30' });
+check(retSab && retSab.idRetencion, 'se puede reservar en un turno especial');
+for (const t of ge.turnosEspeciales) await ok('adminEliminarTurnoFecha', A({ id: t.id }));
+check((await ok('adminGrilla', A())).turnosEspeciales.length === 0, 'turnos especiales eliminados');
+const bl2 = await ok('adminCrearBloqueo', A({ fecha: masDias(5), horaInicio: '21:00', horaFin: '22:00', cancha: '1', motivo: 'Recupero clase' }));
+await ok('adminEditarBloqueo', A({ id: bl2.id, fecha: masDias(6), horaInicio: '20:00', horaFin: '21:00', cancha: '2', motivo: 'Movido' }));
+const bls = await ok('adminBloqueos', A());
+const movido = bls.find((b) => b.id === bl2.id);
+check(movido && movido.fecha === masDias(6) && movido.horaInicio === '20:00' && movido.cancha === '2', 'mover un bloqueo', movido);
+const boot2 = await ok('bootstrap', {}, 'GET');
+check(boot2.fechasEnJuego && boot2.fechasEnJuego['8va Masculino'] === 5 && boot2.fechasEnJuego['6ta Masculino'] === 4, 'portada recibe la fecha en juego de cada categoría', boot2.fechasEnJuego);
+// pagos por jugador sobre una confirmada
+const conf3 = (await ok('adminReservas', A({ filtro: 'proximas' })))[0];
+check(conf3 && conf3.jugadores.length === 4, 'reserva trae los 4 jugadores', conf3 && conf3.jugadores);
+const p1 = await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 2, esSena: true }));
+check(p1.senaIndice === 2 && p1.pagados[2] === true, 'marcar quién pagó la seña');
+await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 0, pagado: true }));
+await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 1, pagado: true }));
+const p4 = await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 3, pagado: true }));
+check(p4.completo === true, 'con los 4 pagos queda completo');
+const tras = (await ok('adminReservas', A({ filtro: 'proximas' }))).find((r) => r.idReserva === conf3.idReserva);
+check(tras.estadoPago === 'PAGO_COMPLETO' && tras.montoPagado === tras.valorTotal, 'monto y estado de pago se actualizan', tras);
+await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 3, pagado: false }));
+check((await ok('consultarReserva', { token: (await api('buscarReserva', { telefono: tras.telefonoSolicitante, codigo: tras.codigoReserva })).data.tokenGestion }, 'GET')).saldoPendiente === 9000, 'destildar un pago vuelve a dejar saldo');
+// etapas
+const rech = await ok('adminReservas', A({ filtro: 'rechazadas' }));
+check(rech.length >= 1 && rech.every((r) => r.estadoReserva === 'RECHAZADO'), 'pestaña rechazadas', rech.length);
+const porCerrar = await ok('adminReservas', A({ filtro: 'porcerrar' }));
+check(porCerrar.some((r) => r.idReserva === 'R0001'), 'jugada pero partido sin resultado → por cerrar', porCerrar.map((r) => r.idReserva));
+// R0001: pago completo; si su partido tiene resultado pasa a completas
+const pR1 = porCerrar.find((r) => r.idReserva === 'R0001');
+check(pR1.pagados.every(Boolean), 'reserva vieja con pago completo = 4 tildados');
+const resumen2 = await ok('adminResumen', A());
+check(typeof resumen2.porCerrar === 'number' && resumen2.porCerrar >= 1, 'resumen cuenta las por cerrar', resumen2.porCerrar);
+
 console.log('9) Protección al re-importar');
 const reimp = await api('importar', A({ datos: datosImport }));
 check(reimp.ok === false && reimp.error.includes('no están en la planilla'), 'no pisa reservas nuevas', reimp.error);

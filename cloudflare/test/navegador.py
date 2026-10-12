@@ -42,6 +42,9 @@ with sync_playwright() as p:
     assert not any('script.google.com' in u for u in peticiones), 'todavía llama a Apps Script'
     ok('ya no llama a Google Apps Script')
     foto(page, '01-inicio')
+    estado = page.text_content('#hero-status')
+    assert estado.strip() == 'FECHA 4 EN JUEGO', estado
+    ok('portada muestra la fecha en juego del panel: ' + estado.strip())
 
     page.click('#cat-select-cta')
     page.click('#inicioCats [data-cat="6ta Masculino"]')
@@ -87,7 +90,20 @@ with sync_playwright() as p:
     page.wait_for_selector('#rsv-panel-exito:not([hidden])', timeout=15000)
     codigo = page.text_content('#rsv-exito-codigo')
     ok('reserva confirmada en %.1fs, código %s' % (time.time() - t0, codigo))
+    assert page.is_visible('#rsvWaAlerta') and 'ATENCIÓN' in page.text_content('#rsvWaTitulo')
+    ok('cartel "ATENCIÓN: mandá tu reserva por WhatsApp" visible')
     foto(page, '06-exito')
+    preguntas = []
+    page.once('dialog', lambda d: (preguntas.append(d.message), d.dismiss()))
+    page.click('#rsvVolverAReservar')
+    assert preguntas and 'WhatsApp' in preguntas[0], preguntas
+    assert page.is_visible('#rsv-panel-exito')
+    ok('si quiere salir sin mandar el WhatsApp, se lo recuerda')
+    with ctx.expect_page() as nueva:
+        page.click('#rsvWhatsappLink')
+    nueva.value.close()
+    assert 'Gracias' in page.text_content('#rsvWaTitulo')
+    ok('al tocar WhatsApp el cartel cambia a "¡Gracias!"')
 
     # buscar mi reserva
     page.goto(BASE)
@@ -129,12 +145,24 @@ with sync_playwright() as p:
     ok('aprobó y ofrece avisar por WhatsApp al 549 351 444 5566')
     foto(page, '10-org-aprobada')
 
+    assert 'Nos vemos' not in href
     page.click('[data-org-filtro="proximas"]')
-    page.wait_for_selector('.org-res [data-org="pago"]')
-    page.locator('.org-res', has_text='Jugadora Prueba').locator('[data-org="pago"]').click()
-    page.wait_for_selector('.org-toast')
-    page.wait_for_selector('.org-res:has-text("Jugadora Prueba") [data-completo="0"]')
-    ok('marcó saldo pagado')
+    page.wait_for_selector('.org-res:has-text("Jugadora Prueba") .org-pago')
+    tarjeta = page.locator('.org-res', has_text='Jugadora Prueba')
+    n = tarjeta.locator('[data-org="pago-jug"]').count()
+    if tarjeta.locator('[data-org="pago-sena"]').count():
+        tarjeta.locator('[data-org="pago-sena"]').first.click()
+        page.wait_for_selector('.org-res:has-text("Jugadora Prueba") .org-pill-sena')
+    for _ in range(3):
+        page.locator('.org-res', has_text='Jugadora Prueba').locator('[data-org="pago-jug"][data-pagado="1"]').first.click()
+        page.wait_for_timeout(400)
+    page.wait_for_selector('.org-res:has-text("Jugadora Prueba") .org-bloque-tit:has-text("completo")')
+    ok('tildó los pagos de los 4 jugadores (seña + 3)')
+    foto(page, '10b-org-pagos')
+    for tab in ['porcerrar', 'completas', 'rechazadas', 'historial']:
+        page.click('[data-org-filtro="%s"]' % tab)
+        page.wait_for_selector('#orgListaRes .org-res, #orgListaRes .state-empty')
+    ok('pestañas Por cerrar / Completas / Rechazadas / Historial')
 
     page.click('[data-org-tab="agenda"]')
     page.wait_for_selector('.org-dia')
@@ -164,10 +192,29 @@ with sync_playwright() as p:
 
     page.click('[data-org-tab="horarios"]')
     page.wait_for_selector('#orgGrilla')
-    page.fill('#bMotivo', 'Clase de prueba')
-    page.click('[data-org="crear-bloqueo"]')
-    page.wait_for_selector('.org-ag-linea:has-text("Clase de prueba")')
+    page.click('[data-org="nuevo-bloqueo"]')
+    page.fill('.org-form-bloqueo [data-b="motivo"]', 'Clase de prueba')
+    page.click('[data-org="guardar-bloqueo"]')
+    page.wait_for_selector('#orgListaBloqueos .org-ag-linea:has-text("Clase de prueba")')
     ok('bloqueó un horario')
+    page.locator('#orgListaBloqueos .org-ag-linea', has_text='Clase de prueba').locator('[data-org="editar-bloqueo"]').click()
+    page.fill('.org-form-bloqueo [data-b="horaInicio"]', '20:00')
+    page.fill('.org-form-bloqueo [data-b="horaFin"]', '21:00')
+    page.click('.org-form-bloqueo [data-org="guardar-bloqueo"]')
+    page.wait_for_selector('#orgListaBloqueos .org-ag-linea:has-text("20:00–21:00")')
+    ok('movió el bloqueo a otro horario')
+    page.click('[data-org="calcular-turnos"]')
+    page.wait_for_selector('[data-te]')
+    nt = page.locator('[data-te]').count()
+    page.click('[data-org="crear-turnos"]')
+    page.wait_for_selector('#orgEspeciales .org-ag-linea')
+    ok('turnos especiales del sábado: %d calculados y agregados' % nt)
+    page.click('[data-org="nueva-clase"]')
+    page.select_option('#kDia', '3')
+    page.fill('#kIni', '21:00'); page.fill('#kFin', '22:00'); page.fill('#kProfe', 'Recupero')
+    page.click('[data-org="guardar-clase"]')
+    page.wait_for_selector('[data-clase]:has-text("Recupero")')
+    ok('agregó una clase fija')
     foto(page, '14-org-horarios')
 
     page.click('[data-org-tab="contenido"]')

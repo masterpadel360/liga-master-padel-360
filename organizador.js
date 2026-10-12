@@ -241,6 +241,7 @@
         '<div class="org-stats">' +
           '<button class="org-stat' + (d.pendientes ? ' is-alert' : '') + '" data-org="ir-pendientes" type="button"><b>' + d.pendientes + '</b><span>Reservas para aprobar</span></button>' +
           '<button class="org-stat" data-org="ir-proximas" type="button"><b>' + d.proximas + '</b><span>Turnos confirmados por jugar</span></button>' +
+          '<button class="org-stat' + (d.porCerrar ? ' is-alert' : '') + '" data-org="ir-porcerrar" type="button"><b>' + (d.porCerrar || 0) + '</b><span>Jugados con pagos o resultado pendiente</span></button>' +
         '</div>' +
         '<div class="org-card">' +
           '<h3>Fecha en juego</h3>' +
@@ -262,58 +263,108 @@
   }
 
   // ============================================================ RESERVAS
+  var FILTROS_RES = [
+    ['pendientes', 'Para aprobar'], ['proximas', 'Confirmadas'], ['porcerrar', 'Por cerrar'],
+    ['completas', 'Completas'], ['rechazadas', 'Rechazadas'], ['historial', 'Historial'],
+  ];
+  var VACIO_RES = {
+    pendientes: 'No hay reservas para aprobar. 🙌',
+    proximas: 'No hay turnos confirmados por jugar.',
+    porcerrar: 'No hay partidos jugados con pagos o resultado pendiente. 🙌',
+    completas: 'Todavía no hay reservas completas (jugadas, pagadas y con resultado).',
+    rechazadas: 'No hay reservas rechazadas.',
+    historial: 'No se encontraron reservas.',
+  };
+  var AYUDA_RES = {
+    proximas: 'Turnos aprobados que todavía no se jugaron.',
+    porcerrar: 'Partidos ya jugados: tildá quién pagó y cargá el resultado. Cuando esté todo, pasan a "Completas".',
+    completas: 'Jugadas, pagadas al 100% y con resultado cargado.',
+  };
   function vReservas() {
     var f = st.filtroReservas;
     var cab =
-      '<div class="org-subtabs">' +
-        [['pendientes', 'Para aprobar'], ['proximas', 'Confirmadas'], ['historial', 'Historial']].map(function (x) {
-          return '<button class="chip' + (f === x[0] ? ' active' : '') + '" data-org-filtro="' + x[0] + '" type="button">' + x[1] + '</button>';
-        }).join('') +
-      '</div>' +
+      '<div class="org-subtabs">' + FILTROS_RES.map(function (x) {
+        return '<button class="chip' + (f === x[0] ? ' active' : '') + '" data-org-filtro="' + x[0] + '" type="button">' + x[1] + '</button>';
+      }).join('') + '</div>' +
+      (AYUDA_RES[f] ? '<p class="org-muted">' + AYUDA_RES[f] + '</p>' : '') +
       (f === 'historial' ? '<div class="org-row"><input class="org-input" id="orgBuscar" placeholder="Buscar nombre, pareja, teléfono o código" value="' + esc(st.busqueda) + '"><button class="rsv-copy-btn" data-org="buscar" type="button">Buscar</button></div>' : '') +
       '<div id="orgListaRes"><div class="state-loading">Cargando…</div></div>';
     vista().innerHTML = cab;
+    var activa = root.querySelector('[data-org-filtro="' + f + '"]');
+    if (activa && activa.scrollIntoView) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
     api('adminReservas', { filtro: f, q: st.busqueda }).then(function (lista) {
       if (f === 'pendientes') actualizarBadge(lista.length);
       var cont = $('#orgListaRes');
-      if (!lista.length) {
-        cont.innerHTML = '<p class="state-empty">' + ({ pendientes: 'No hay reservas para aprobar. 🙌', proximas: 'No hay turnos confirmados por jugar.', historial: 'No se encontraron reservas.' })[f] + '</p>';
-        return;
-      }
-      cont.innerHTML = lista.map(tarjetaReserva).join('');
+      if (!lista.length) { cont.innerHTML = '<p class="state-empty">' + VACIO_RES[f] + '</p>'; return; }
+      cont.innerHTML = (f === 'historial' || f === 'completas' || f === 'rechazadas' ? '<p class="org-muted">' + lista.length + ' reserva(s)</p>' : '') +
+        lista.map(tarjetaReserva).join('');
     }).catch(errorVista);
   }
 
   function mensajeWa(r, tipo) {
     var base = r.categoria + ': ' + r.parejaA + ' vs ' + r.parejaB + '\n📅 ' + fechaCorta(r.fecha) + ' · ' + r.horarioInicio + ' a ' + r.horarioFin + (r.cancha ? '\n🎾 Cancha ' + r.cancha : '');
     var nombre = (r.nombreSolicitante || '').split(' ')[0];
-    if (tipo === 'aprobada') return '¡Hola ' + nombre + '! Tu reserva de la Liga Master Pádel 360 quedó CONFIRMADA ✅\n\n' + base + '\nCódigo: ' + r.codigoReserva + '\n\nSaldo a abonar en el club: ' + plata(r.saldoPendiente) + '. ¡Nos vemos en la cancha!';
+    if (tipo === 'aprobada') return '¡Hola ' + nombre + '! Tu reserva de la Liga Master Pádel 360 quedó CONFIRMADA ✅\n\n' + base + '\nCódigo: ' + r.codigoReserva + '\n\nSaldo a abonar en el club: ' + plata(r.saldoPendiente) + '.';
     if (tipo === 'rechazada') return 'Hola ' + nombre + ', no pudimos confirmar tu solicitud de reserva de la Liga Master Pádel 360:\n\n' + base + '\n\nEl horario quedó libre otra vez. Escribime así lo resolvemos.';
-    return 'Hola ' + nombre + '! Te recuerdo tu partido de la Liga Master Pádel 360 🎾\n\n' + base + (r.estadoPago !== 'PAGO_COMPLETO' ? '\nSaldo pendiente: ' + plata(r.saldoPendiente) : '') + '\n\n¡Éxitos!';
+    return 'Hola ' + nombre + '! Te recuerdo tu partido de la Liga Master Pádel 360 🎾\n\n' + base + (r.estadoPago !== 'PAGO_COMPLETO' ? '\nSaldo pendiente: ' + plata(r.saldoPendiente) : '');
+  }
+
+  function seccionPagos(r) {
+    if (!r.jugadores) return '';
+    var cuota = Math.round(r.valorTotal / 4);
+    var pagados = r.pagados.filter(Boolean).length;
+    var filas = r.jugadores.map(function (j, i) {
+      var esSena = r.senaIndice === i;
+      var pago = r.pagados[i];
+      return '<div class="org-pago' + (pago ? ' is-pagado' : '') + '">' +
+        '<span class="org-pago-nombre">' + esc(j || ('Jugador ' + (i + 1))) + (esSena ? ' <span class="org-pill org-pill-sena">Seña</span>' : '') + '</span>' +
+        (esSena ? '<span class="org-muted org-mini">Pagó con la seña</span>' :
+          '<button class="org-toggle' + (pago ? ' is-on' : '') + '" data-org="pago-jug" data-id="' + esc(r.idReserva) + '" data-i="' + i + '" data-pagado="' + (pago ? '0' : '1') + '" type="button">' + (pago ? '✓ Pagó' : 'Marcar pagó') + '</button>') +
+        (r.senaIndice === null || r.senaIndice === undefined ? '<button class="org-link" data-org="pago-sena" data-id="' + esc(r.idReserva) + '" data-i="' + i + '" type="button">Seña</button>' : '') +
+      '</div>';
+    }).join('');
+    return '<div class="org-bloque">' +
+      '<div class="org-bloque-tit"><b>Pagos</b><span class="org-muted">' + pagados + '/4 · ' + plata(cuota) + ' c/u' + (pagados === 4 ? ' · ✅ completo' : ' · falta ' + plata(r.valorTotal - Math.round(r.valorTotal * pagados / 4))) + '</span></div>' +
+      (r.senaIndice === null || r.senaIndice === undefined ? '<p class="org-muted org-mini">No reconocí quién pagó la seña (' + esc(r.nombreSolicitante) + '): tocá "Seña" al lado de esa persona.</p>' : '') +
+      filas +
+      (pagados < 4 ? '<button class="org-link" data-org="pago" data-completo="1" data-id="' + esc(r.idReserva) + '" type="button">Marcar todos pagados</button>' : '') +
+    '</div>';
+  }
+  function seccionResultado(r) {
+    var p = r.partido;
+    if (!p) return '';
+    var jugado = p.estado === 'JUGADO';
+    var gan = jugado ? (p.ganadorId === p.parejaAId ? r.parejaA : r.parejaB) : '';
+    return '<div class="org-bloque" data-partido="' + esc(r.idPartido) + '">' +
+      '<div class="org-bloque-tit"><b>Resultado</b><span class="org-muted">' + (jugado ? '✅ Ganó ' + esc(gan) : 'Sin cargar') + '</span></div>' +
+      '<div class="org-sets">' + [1, 2, 3].map(function (i) {
+        return '<input class="org-input org-set" inputmode="numeric" data-set="' + i + '" value="' + esc(p['set' + i]) + '" placeholder="' + (i === 3 ? 'STB' : 'Set ' + i) + '" aria-label="Set ' + i + '">';
+      }).join('') +
+      '<button class="rsv-btn-aprobar org-guardar-set" data-org="guardar-resultado-res" type="button">Guardar</button></div>' +
+      '<p class="org-muted org-mini">Sets del lado de ' + esc(r.parejaA) + ' (ej: 6-4).</p>' +
+    '</div>';
   }
 
   function tarjetaReserva(r) {
     var e = r.estadoReserva;
-    var pagoTx = r.estadoPago === 'PAGO_COMPLETO' ? 'Pago completo' : 'Falta ' + plata(r.saldoPendiente);
     var acciones = '';
     if (e === 'PENDIENTE_APROBACION') {
       acciones =
         '<button class="rsv-btn-ghost" data-org="rechazar" data-id="' + esc(r.idReserva) + '" type="button">Rechazar</button>' +
         '<button class="rsv-btn-aprobar" data-org="aprobar" data-id="' + esc(r.idReserva) + '" type="button">Aprobar</button>';
-    } else if (e === 'RESERVADO') {
-      acciones =
-        (r.estadoPago === 'PAGO_COMPLETO'
-          ? '<button class="rsv-btn-ghost" data-org="pago" data-completo="0" data-id="' + esc(r.idReserva) + '" type="button">Deshacer pago</button>'
-          : '<button class="rsv-btn-aprobar" data-org="pago" data-completo="1" data-id="' + esc(r.idReserva) + '" type="button">Saldo pagado</button>') +
-        '<a class="rsv-btn-ghost org-wa" href="' + esc(linkWa(r.telefonoSolicitante, mensajeWa(r, 'recordatorio'))) + '" target="_blank" rel="noopener">WhatsApp</a>';
+    } else if (e === 'RESERVADO' || e === 'FINALIZADO') {
+      acciones = '<a class="rsv-btn-ghost org-wa" href="' + esc(linkWa(r.telefonoSolicitante, mensajeWa(r, 'recordatorio'))) + '" target="_blank" rel="noopener">WhatsApp</a>';
     }
-    return '<div class="admin-card org-res org-est-' + e + '" data-res-card="' + esc(r.idReserva) + '" data-res=\'' + esc(JSON.stringify(r)) + '\'>' +
-      '<div class="org-res-head"><span class="org-pill">' + esc(EST_TX[e] || e) + '</span><span class="org-muted">' + esc(r.idReserva) + ' · ' + esc(r.codigoReserva) + '</span></div>' +
+    var etiqueta = r.etapa === 'completas' ? 'Completa' : r.etapa === 'porcerrar' ? 'Por cerrar' : (EST_TX[e] || e);
+    var conDetalle = e === 'RESERVADO' || e === 'FINALIZADO';
+    return '<div class="admin-card org-res org-est-' + e + (r.etapa ? ' org-etapa-' + r.etapa : '') + '" data-res-card="' + esc(r.idReserva) + '" data-res=\'' + esc(JSON.stringify(r)) + '\'>' +
+      '<div class="org-res-head"><span class="org-pill">' + esc(etiqueta) + '</span><span class="org-muted">' + esc(r.idReserva) + ' · ' + esc(r.codigoReserva) + '</span></div>' +
       '<div class="org-res-cruce">' + esc(r.parejaA) + ' <span class="org-muted">vs</span> ' + esc(r.parejaB) + '</div>' +
       '<div class="org-res-meta"><span>' + esc(r.categoria) + '</span><span>📅 ' + esc(fechaCorta(r.fecha)) + ' ' + esc(r.horarioInicio) + '–' + esc(r.horarioFin) + '</span><span>Cancha ' + esc(r.cancha) + '</span></div>' +
       '<div class="org-res-meta"><span>👤 ' + esc(r.nombreSolicitante) + '</span><a href="tel:' + esc(r.telefonoSolicitante) + '">📞 ' + esc(r.telefonoSolicitante) + '</a>' +
-        (e === 'RESERVADO' || e === 'FINALIZADO' ? '<span>' + esc(pagoTx) + '</span>' : '<span>Seña ' + plata(r.montoPagado) + '</span>') + '</div>' +
+        (conDetalle ? '' : '<span>Seña ' + plata(r.montoPagado) + '</span>') + '</div>' +
       (r.comprobanteUrl ? '<a class="admin-comprobante-link" href="' + esc(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante</a>' : '<span class="hint-line">Sin comprobante</span>') +
+      (conDetalle ? seccionPagos(r) + seccionResultado(r) : '') +
       (acciones ? '<div class="admin-card-actions">' + acciones + '</div>' : '') +
       (e === 'RESERVADO' ? '<button class="org-link org-danger" data-org="cancelar-res" data-id="' + esc(r.idReserva) + '" type="button">Cancelar turno</button>' : '') +
       '<div class="org-tras" hidden></div>' +
@@ -323,6 +374,13 @@
   function datosTarjeta(el) {
     var card = el.closest('[data-res-card]');
     try { return { card: card, r: JSON.parse(card.getAttribute('data-res')) }; } catch (e) { return { card: card, r: null }; }
+  }
+  // Repinta una sola tarjeta (después de tildar un pago o cargar un resultado),
+  // sin recargar toda la lista ni perder la posición.
+  function repintarTarjeta(card, r) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = tarjetaReserva(r);
+    card.replaceWith(tmp.firstChild);
   }
 
   function accionReserva(el, accion) {
@@ -346,6 +404,7 @@
   function vAgenda() {
     if (!st.agendaDesde) st.agendaDesde = hoyISO();
     api('adminAgenda', { desde: st.agendaDesde, dias: 7 }).then(function (d) {
+      st.cantidadCanchas = d.cantidadCanchas;
       var html =
         '<div class="org-row org-nav-sem">' +
           '<button class="rsv-copy-btn" data-org="sem-prev" type="button">‹</button>' +
@@ -354,12 +413,18 @@
           (d.desde !== hoyISO() ? '<button class="org-link" data-org="sem-hoy" type="button">Hoy</button>' : '') +
         '</div>';
       html += d.dias.map(function (dia) {
+        var titulo = '<div class="org-row org-spread"><h3>' + esc(dia.diaSemana) + ' ' + esc(fechaCorta(dia.fecha).slice(4)) + '</h3>' +
+          '<button class="org-link" data-org="turnos-dia" data-fecha="' + dia.fecha + '" type="button">+ Turnos este día</button></div>';
+        var clases = dia.clases.length ? '<div class="org-clases-dia">' + dia.clases.map(function (k) {
+          return '<span class="org-tag org-tag-clase">' + esc(k.profe || 'Clase') + ' ' + esc(k.inicio) + '–' + esc(k.fin) + (k.canchas > 1 ? ' (' + k.canchas + ' canchas)' : '') + '</span>';
+        }).join('') + '</div>' : '';
         var hayAlgo = dia.franjas.length || dia.otras.length || dia.bloqueos.length;
-        if (!hayAlgo) return '<div class="org-dia is-vacio"><h3>' + esc(dia.diaSemana) + ' ' + esc(fechaCorta(dia.fecha).slice(4)) + '</h3><p class="org-muted">Sin turnos de liga.</p></div>';
-        return '<div class="org-dia"><h3>' + esc(dia.diaSemana) + ' ' + esc(fechaCorta(dia.fecha).slice(4)) + '</h3>' +
+        if (!hayAlgo) return '<div class="org-dia is-vacio">' + titulo + clases + '<p class="org-muted">Sin turnos de liga.</p></div>';
+        return '<div class="org-dia">' + titulo + clases +
           dia.franjas.map(function (fr) {
             return '<div class="org-franja">' +
-              '<div class="org-franja-head"><b>' + fr.inicio + '–' + fr.fin + '</b><span class="org-libres' + (fr.libres ? '' : ' is-lleno') + '">' + (fr.libres ? fr.libres + ' libre' + (fr.libres > 1 ? 's' : '') : 'Completo') + ' / ' + fr.canchas + '</span>' +
+              '<div class="org-franja-head"><b>' + fr.inicio + '–' + fr.fin + '</b>' + (fr.especial ? '<span class="org-pill">Especial</span>' : '') +
+              '<span class="org-libres' + (fr.libres ? '' : ' is-lleno') + '">' + (fr.libres ? fr.libres + ' libre' + (fr.libres > 1 ? 's' : '') : 'Completo') + ' / ' + fr.canchas + '</span>' +
               '<button class="org-link" data-org="bloquear-franja" data-fecha="' + dia.fecha + '" data-ini="' + fr.inicio + '" data-fin="' + fr.fin + '" type="button">Bloquear</button></div>' +
               fr.reservas.map(lineaAgenda).join('') +
               fr.bloqueos.map(lineaBloqueo).join('') +
@@ -380,9 +445,36 @@
     '</div>';
   }
   function lineaBloqueo(b) {
-    return '<div class="org-ag-linea is-bloqueo"><span class="org-cancha">' + (b.cancha === 'TODAS' ? 'Todas' : 'C' + esc(b.cancha)) + '</span>' +
-      '<span class="org-ag-tx"><b>Bloqueado ' + esc(b.horaInicio) + '–' + esc(b.horaFin) + '</b><span class="org-muted">' + esc(b.motivo || 'Sin motivo') + '</span></span>' +
+    return '<div class="org-ag-linea is-bloqueo" data-bloqueo=\'' + esc(JSON.stringify(b)) + '\'><span class="org-cancha">' + (b.cancha === 'TODAS' ? 'Todas' : 'C' + esc(b.cancha)) + '</span>' +
+      '<span class="org-ag-tx"><b>' + (b.fecha ? esc(fechaCorta(b.fecha)) + ' · ' : '') + 'Bloqueado ' + esc(b.horaInicio) + '–' + esc(b.horaFin) + '</b><span class="org-muted">' + esc(b.motivo || 'Sin motivo') + '</span></span>' +
+      '<button class="org-link" data-org="editar-bloqueo" type="button">Mover</button>' +
       '<button class="org-link org-danger" data-org="borrar-bloqueo" data-id="' + esc(b.id) + '" type="button">Quitar</button></div>';
+  }
+  function opcionesCancha(sel) {
+    var n = st.cantidadCanchas || (st.resumen && st.resumen.config && st.resumen.config.cantidadCanchas) || 3;
+    var out = '<option value="TODAS"' + (sel === 'TODAS' ? ' selected' : '') + '>Todas las canchas</option>';
+    for (var i = 1; i <= n; i++) out += '<option value="' + i + '"' + (String(sel) === String(i) ? ' selected' : '') + '>Cancha ' + i + '</option>';
+    return out;
+  }
+  // Formulario chico (aparece debajo del elemento tocado) para crear o mover un bloqueo.
+  function formBloqueo(ancla, b) {
+    var viejo = root.querySelector('.org-form-bloqueo');
+    if (viejo) viejo.remove();
+    var div = document.createElement('div');
+    div.className = 'org-subform org-form-bloqueo';
+    div.innerHTML =
+      '<h4>' + (b.id ? 'Mover bloqueo' : 'Bloquear horario') + '</h4>' +
+      '<div class="org-grid2">' +
+        '<label>Día<input type="date" class="org-input" data-b="fecha" value="' + esc(b.fecha) + '"></label>' +
+        '<label>Cancha<select class="org-input" data-b="cancha">' + opcionesCancha(b.cancha || 'TODAS') + '</select></label>' +
+        '<label>Desde<input type="time" class="org-input" data-b="horaInicio" value="' + esc(b.horaInicio) + '"></label>' +
+        '<label>Hasta<input type="time" class="org-input" data-b="horaFin" value="' + esc(b.horaFin) + '"></label>' +
+      '</div>' +
+      '<input class="org-input" data-b="motivo" placeholder="Motivo (ej: Recupero clase Gabriel)" value="' + esc(b.motivo || '') + '">' +
+      '<div class="org-row"><button class="rsv-btn-aprobar" data-org="guardar-bloqueo" data-id="' + esc(b.id || '') + '" type="button">' + (b.id ? 'Guardar cambios' : 'Bloquear') + '</button>' +
+      '<button class="rsv-btn-ghost" data-org="cerrar-form" type="button">Cancelar</button></div>';
+    ancla.insertAdjacentElement('afterend', div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   // ============================================================ RESULTADOS
@@ -489,37 +581,83 @@
   }
 
   // ============================================================ HORARIOS
+  var DIAS_SEL = [[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [0, 'Domingo']];
+  // Máximo de canchas ocupadas a la vez por clases (misma cuenta que el servidor).
+  function clasesSimultaneas(clasesDia, ini, fin) {
+    var rel = (clasesDia || []).filter(function (k) { return k.inicio < fin && ini < k.fin; });
+    var puntos = [ini].concat(rel.map(function (k) { return k.inicio > ini ? k.inicio : ini; }));
+    var max = 0;
+    puntos.forEach(function (p) {
+      var n = 0;
+      rel.forEach(function (k) { if (k.inicio <= p && p < k.fin) n += Number(k.canchas) || 1; });
+      if (n > max) max = n;
+    });
+    return max;
+  }
+  function libresPorClases(dia, ini, fin) {
+    if (!ini || !fin || fin <= ini) return null;
+    var clasesDia = (st.clases || []).filter(function (k) { return Number(k.dia) === Number(dia); });
+    return Math.max(0, (st.cantidadCanchas || 3) - clasesSimultaneas(clasesDia, ini, fin));
+  }
   function vHorarios() {
     Promise.all([api('adminBloqueos'), api('adminGrilla'), api('adminResumen')]).then(function (r) {
       var bloqueos = r[0], grilla = r[1], cfg = r[2].config;
       st.resumen = r[2];
-      var opcCancha = '<option value="TODAS">Todas las canchas</option>' + Array.from({ length: cfg.cantidadCanchas }, function (_, i) { return '<option value="' + (i + 1) + '">Cancha ' + (i + 1) + '</option>'; }).join('');
+      st.clases = grilla.clases;
+      st.cantidadCanchas = grilla.cantidadCanchas;
+      var porDia = {};
+      grilla.clases.forEach(function (k) { (porDia[k.dia] = porDia[k.dia] || []).push(k); });
+      var sab = hoyISO();
+      while (new Date(sab + 'T12:00:00Z').getUTCDay() !== 6) sab = sumarDias(sab, 1);
       vista().innerHTML =
-        '<div class="org-card"><h3>Bloquear un horario</h3>' +
-          '<p class="org-muted">Para clases, torneos o cualquier día que una cancha no esté para la liga.</p>' +
+        // ---- Turnos especiales para un día
+        '<div class="org-card" id="orgEspeciales"><h3>Turnos especiales para un día</h3>' +
+          '<p class="org-muted">Para abrir horarios extra un día puntual (ej: "este sábado de 9 a 21"). Te armo los turnos y te digo cuántas canchas quedan libres en cada uno.</p>' +
           '<div class="org-grid2">' +
-            '<label>Día<input type="date" class="org-input" id="bFecha" value="' + hoyISO() + '"></label>' +
-            '<label>Cancha<select class="org-input" id="bCancha">' + opcCancha + '</select></label>' +
-            '<label>Desde<input type="time" class="org-input" id="bIni" value="18:00"></label>' +
-            '<label>Hasta<input type="time" class="org-input" id="bFin" value="19:30"></label>' +
+            '<label>Día<input type="date" class="org-input" id="teFecha" value="' + esc(st.fechaEspecial || sab) + '"></label>' +
+            '<label>Duración<select class="org-input" id="teDur"><option value="90" selected>90 minutos</option><option value="60">60 minutos</option><option value="120">120 minutos</option></select></label>' +
+            '<label>Desde<input type="time" class="org-input" id="teDesde" value="09:00"></label>' +
+            '<label>Hasta<input type="time" class="org-input" id="teHasta" value="21:00"></label>' +
           '</div>' +
-          '<input class="org-input" id="bMotivo" placeholder="Motivo (ej: Clase Gabriel)">' +
-          '<button class="rsv-btn-aprobar" data-org="crear-bloqueo" type="button">Bloquear</button>' +
-          '<h4>Próximos bloqueos</h4>' +
-          (bloqueos.length ? bloqueos.map(function (b) {
-            return '<div class="org-ag-linea is-bloqueo"><span class="org-cancha">' + (b.cancha === 'TODAS' ? 'Todas' : 'C' + esc(b.cancha)) + '</span>' +
-              '<span class="org-ag-tx"><b>' + esc(fechaCorta(b.fecha)) + ' · ' + esc(b.horaInicio) + '–' + esc(b.horaFin) + '</b><span class="org-muted">' + esc(b.motivo) + '</span></span>' +
-              '<button class="org-link org-danger" data-org="borrar-bloqueo" data-id="' + esc(b.id) + '" type="button">Quitar</button></div>';
-          }).join('') : '<p class="org-muted">No hay bloqueos cargados.</p>') +
+          '<button class="rsv-copy-btn" data-org="calcular-turnos" type="button">Ver turnos y canchas libres</button>' +
+          '<div id="teResultado"></div>' +
+          (grilla.turnosEspeciales.length ? '<h4>Próximos turnos especiales</h4>' + grilla.turnosEspeciales.map(function (t) {
+            return '<div class="org-ag-linea"><span class="org-cancha">' + t.canchas + 'c</span><span class="org-ag-tx"><b>' + esc(fechaCorta(t.fecha)) + ' · ' + esc(t.inicio) + '–' + esc(t.fin) + '</b></span>' +
+              '<button class="org-link org-danger" data-org="borrar-especial" data-id="' + t.id + '" type="button">Quitar</button></div>';
+          }).join('') : '') +
         '</div>' +
-        '<div class="org-card"><h3>Turnos de cada día</h3>' +
-          '<p class="org-muted">Los horarios que se ofrecen para reservar y cuántas canchas hay para la liga en cada uno. Si cambian las clases de los profes, ajustalo acá.</p>' +
+        // ---- Bloqueos puntuales
+        '<div class="org-card" id="orgBloqueos"><div class="org-row org-spread"><h3>Bloqueos puntuales</h3>' +
+          '<button class="rsv-copy-btn" data-org="nuevo-bloqueo" type="button">+ Bloquear</button></div>' +
+          '<p class="org-muted">Un horario de un día puntual que no se puede reservar (ej: recuperar una clase el miércoles de 21 a 22). Los podés mover o quitar.</p>' +
+          '<div id="orgListaBloqueos">' + (bloqueos.length ? bloqueos.map(lineaBloqueo).join('') : '<p class="org-muted">No hay bloqueos próximos.</p>') + '</div>' +
+        '</div>' +
+        // ---- Clases fijas
+        '<div class="org-card"><div class="org-row org-spread"><h3>Clases fijas (todas las semanas)</h3>' +
+          '<button class="rsv-copy-btn" data-org="nueva-clase" type="button">+ Clase</button></div>' +
+          '<p class="org-muted">Tus clases y las de los profes. Ocupan canchas: con esto calculo cuántas quedan para la liga.</p>' +
+          '<div id="orgFormClase"></div>' +
+          DIAS_SEL.map(function (d) {
+            var ks = porDia[d[0]] || [];
+            if (!ks.length) return '';
+            return '<div class="org-gdia"><b>' + d[1] + '</b>' + ks.map(function (k) {
+              return '<div class="org-ag-linea" data-clase=\'' + esc(JSON.stringify(k)) + '\'><span class="org-cancha">' + k.canchas + 'c</span>' +
+                '<span class="org-ag-tx"><b>' + esc(k.inicio) + '–' + esc(k.fin) + '</b><span class="org-muted">' + esc(k.profe || 'Clase') + '</span></span>' +
+                '<button class="org-link" data-org="editar-clase" type="button">Editar</button>' +
+                '<button class="org-link org-danger" data-org="borrar-clase" data-id="' + k.id + '" type="button">✕</button></div>';
+            }).join('') + '</div>';
+          }).join('') +
+        '</div>' +
+        // ---- Grilla semanal
+        '<div class="org-card"><h3>Turnos de la liga (todas las semanas)</h3>' +
+          '<p class="org-muted">Los horarios que se ofrecen para reservar. "Libres" = canchas que dejan las clases fijas; nunca se ofrecen más que esas.</p>' +
           '<div id="orgGrilla">' + grilla.dias.map(function (dia) {
             return '<div class="org-gdia" data-gdia="' + dia.dia + '"><div class="org-row org-spread"><b>' + esc(dia.nombre) + '</b><button class="org-link" data-org="g-agregar" type="button">+ turno</button></div>' +
-              dia.franjas.map(filaGrilla).join('') + '</div>';
+              dia.franjas.map(function (f) { return filaGrilla(f, dia.dia); }).join('') + '</div>';
           }).join('') + '</div>' +
           '<button class="rsv-btn-aprobar org-btn-full" data-org="guardar-grilla" type="button">Guardar turnos</button>' +
         '</div>' +
+        // ---- Precios
         '<div class="org-card"><h3>Precios y reglas</h3>' +
           '<div class="org-grid2">' +
             campoCfg('valor_turno', 'Valor del turno ($)', cfg.valorTurno, 'number') +
@@ -534,14 +672,43 @@
         '</div>';
     }).catch(errorVista);
   }
-  function filaGrilla(f) {
+  function filaGrilla(f, dia) {
+    var libres = libresPorClases(dia, f.inicio, f.fin);
     return '<div class="org-gfila"><input type="time" class="org-input" data-g="inicio" value="' + esc(f.inicio || '') + '">' +
       '<span>a</span><input type="time" class="org-input" data-g="fin" value="' + esc(f.fin || '') + '">' +
-      '<input type="number" min="1" class="org-input org-num" data-g="canchas" value="' + esc(f.canchas || 2) + '" title="Canchas"><span class="org-muted">canchas</span>' +
+      '<input type="number" min="1" class="org-input org-num" data-g="canchas" value="' + esc(f.canchas || (libres || 2)) + '" title="Canchas para la liga"><span class="org-muted">canchas</span>' +
+      '<span class="org-libres-clases' + (libres !== null && Number(f.canchas) > libres ? ' is-aviso' : '') + '" data-g="libres">' + (libres === null ? '' : 'libres: ' + libres) + '</span>' +
       '<button class="org-link org-danger" data-org="g-quitar" type="button" title="Quitar">✕</button></div>';
   }
   function campoCfg(clave, etiqueta, valor, tipo) {
     return '<label>' + esc(etiqueta) + '<input class="org-input" type="' + tipo + '" data-cfg="' + clave + '" value="' + esc(valor) + '"></label>';
+  }
+  function formClase(k) {
+    var cont = $('#orgFormClase');
+    cont.innerHTML = '<div class="org-subform">' +
+      '<h4>' + (k.id ? 'Editar clase' : 'Nueva clase fija') + '</h4>' +
+      '<div class="org-grid2">' +
+        '<label>Día<select class="org-input" id="kDia">' + DIAS_SEL.map(function (d) { return '<option value="' + d[0] + '"' + (Number(k.dia) === d[0] ? ' selected' : '') + '>' + d[1] + '</option>'; }).join('') + '</select></label>' +
+        '<label>Profe<input class="org-input" id="kProfe" value="' + esc(k.profe || '') + '" placeholder="Gabriel, Dani…"></label>' +
+        '<label>Desde<input type="time" class="org-input" id="kIni" value="' + esc(k.inicio || '') + '"></label>' +
+        '<label>Hasta<input type="time" class="org-input" id="kFin" value="' + esc(k.fin || '') + '"></label>' +
+        '<label>Canchas que ocupa<input type="number" min="1" class="org-input" id="kCanchas" value="' + esc(k.canchas || 1) + '"></label>' +
+      '</div>' +
+      '<div class="org-row"><button class="rsv-btn-aprobar" data-org="guardar-clase" data-id="' + esc(k.id || '') + '" type="button">Guardar</button>' +
+      '<button class="rsv-btn-ghost" data-org="cerrar-form-clase" type="button">Cancelar</button></div></div>';
+    cont.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function pintarCalculoTurnos(d) {
+    st.calculo = d;
+    $('#teResultado').innerHTML = '<div class="org-subform"><h4>' + esc(d.diaSemana) + ' ' + esc(fechaCorta(d.fecha).slice(4)) + ' · elegí cuáles agregar</h4>' +
+      d.turnos.map(function (t, i) {
+        var marcar = t.libres > 0 && !t.choca;
+        return '<div class="org-gfila" data-te="' + i + '"><label class="org-check"><input type="checkbox" data-te-on' + (marcar ? ' checked' : '') + '> <b>' + t.inicio + '–' + t.fin + '</b></label>' +
+          '<input type="number" min="1" max="' + d.cantidadCanchas + '" class="org-input org-num" data-te-canchas value="' + Math.max(1, t.libres) + '">' +
+          '<span class="org-libres-clases' + (t.libres ? '' : ' is-aviso') + '">libres: ' + t.libres + '</span>' +
+          (t.choca ? '<span class="org-muted org-mini">ya hay turno ' + esc(t.choca) + '</span>' : '') + '</div>';
+      }).join('') +
+      '<button class="rsv-btn-aprobar org-btn-full" data-org="crear-turnos" type="button">Agregar turnos marcados</button></div>';
   }
 
   // ============================================================ CONTENIDO
@@ -625,6 +792,7 @@
     recargar: function () { irTab(st.tab); },
     'ir-pendientes': function () { st.filtroReservas = 'pendientes'; irTab('reservas'); },
     'ir-proximas': function () { st.filtroReservas = 'proximas'; irTab('reservas'); },
+    'ir-porcerrar': function () { st.filtroReservas = 'porcerrar'; irTab('reservas'); },
     'fej-todas': function (el) {
       var v = $('#orgFejTodas').value;
       if (!v) { toast('Escribí el número de fecha.', 'error'); return; }
@@ -633,10 +801,7 @@
     buscar: function () { st.busqueda = $('#orgBuscar').value.trim(); vReservas(); },
     aprobar: function (el) { accionReserva(el, 'aprobar'); },
     rechazar: function (el) { accionReserva(el, 'rechazar'); },
-    pago: function (el) {
-      var completo = el.getAttribute('data-completo') === '1';
-      conBoton(el, api('adminMarcarPago', { idReserva: el.getAttribute('data-id'), completo: completo }), completo ? 'Saldo marcado como pagado 💰' : 'Pago desmarcado').then(vReservas).catch(function () {});
-    },
+
     'cancelar-res': function (el) {
       if (!confirm('¿Cancelar este turno confirmado? El horario y el cruce vuelven a quedar libres.')) return;
       conBoton(el, api('adminCancelarReserva', { idReserva: el.getAttribute('data-id') }), 'Turno cancelado').then(vReservas).catch(function () {});
@@ -644,19 +809,9 @@
     'sem-prev': function () { st.agendaDesde = sumarDias(st.agendaDesde, -7); vAgenda(); },
     'sem-next': function () { st.agendaDesde = sumarDias(st.agendaDesde, 7); vAgenda(); },
     'sem-hoy': function () { st.agendaDesde = hoyISO(); vAgenda(); },
-    'bloquear-franja': function (el) {
-      var cancha = prompt('¿Qué cancha bloqueás de ' + el.getAttribute('data-ini') + ' a ' + el.getAttribute('data-fin') + '?\nEscribí 1, 2, 3 o TODAS', 'TODAS');
-      if (!cancha) return;
-      var motivo = prompt('Motivo (opcional)', 'Clase') || '';
-      conBoton(el, api('adminCrearBloqueo', { fecha: el.getAttribute('data-fecha'), horaInicio: el.getAttribute('data-ini'), horaFin: el.getAttribute('data-fin'), cancha: cancha.trim(), motivo: motivo }), 'Horario bloqueado').then(function () { irTab(st.tab); }).catch(function () {});
-    },
-    'borrar-bloqueo': function (el) {
-      if (!confirm('¿Quitar este bloqueo? El horario vuelve a estar disponible para reservar.')) return;
-      conBoton(el, api('adminEliminarBloqueo', { id: el.getAttribute('data-id') }), 'Bloqueo quitado').then(function () { irTab(st.tab); }).catch(function () {});
-    },
-    'crear-bloqueo': function (el) {
-      conBoton(el, api('adminCrearBloqueo', { fecha: $('#bFecha').value, horaInicio: $('#bIni').value, horaFin: $('#bFin').value, cancha: $('#bCancha').value, motivo: $('#bMotivo').value }), 'Horario bloqueado').then(vHorarios).catch(function () {});
-    },
+
+
+
     'guardar-resultado': function (el) {
       var fila = el.closest('[data-partido]');
       var sets = {};
@@ -699,10 +854,98 @@
       if (!confirm('¿Eliminar la categoría "' + n + '"?')) return;
       conBoton(el, api('adminEliminarCategoria', { nombre: n }), 'Categoría eliminada').then(function () { st.resumen = null; st.catParejas = null; vParejas(); }).catch(function () {});
     },
-    'g-agregar': function (el) {
-      el.closest('[data-gdia]').insertAdjacentHTML('beforeend', filaGrilla({ inicio: '', fin: '', canchas: 2 }));
-    },
+
     'g-quitar': function (el) { el.closest('.org-gfila').remove(); },
+    pago: function (el) {
+      var x = datosTarjeta(el);
+      conBoton(el, api('adminMarcarPago', { idReserva: el.getAttribute('data-id'), completo: true }), 'Todos pagados 💰').then(function (d) {
+        x.r.pagados = d.pagados; x.r.estadoPago = 'PAGO_COMPLETO'; x.r.saldoPendiente = 0;
+        repintarTarjeta(x.card, x.r);
+      }).catch(function () {});
+    },
+    'pago-jug': function (el) {
+      var x = datosTarjeta(el), i = Number(el.getAttribute('data-i')), pagado = el.getAttribute('data-pagado') === '1';
+      conBoton(el, api('adminPagoJugador', { idReserva: el.getAttribute('data-id'), indice: i, pagado: pagado })).then(function (d) {
+        x.r.pagados = d.pagados; x.r.senaIndice = d.senaIndice;
+        x.r.estadoPago = d.completo ? 'PAGO_COMPLETO' : 'SALDO_PENDIENTE';
+        x.r.saldoPendiente = x.r.valorTotal - Math.round(x.r.valorTotal * d.pagados.filter(Boolean).length / 4);
+        repintarTarjeta(x.card, x.r);
+        if (d.completo) toast('Pagos completos 💰');
+      }).catch(function () {});
+    },
+    'pago-sena': function (el) {
+      var x = datosTarjeta(el), i = Number(el.getAttribute('data-i'));
+      conBoton(el, api('adminPagoJugador', { idReserva: el.getAttribute('data-id'), indice: i, esSena: true }), 'Seña asignada').then(function (d) {
+        x.r.pagados = d.pagados; x.r.senaIndice = d.senaIndice;
+        repintarTarjeta(x.card, x.r);
+      }).catch(function () {});
+    },
+    'guardar-resultado-res': function (el) {
+      var x = datosTarjeta(el), bloque = el.closest('[data-partido]');
+      var sets = {};
+      bloque.querySelectorAll('[data-set]').forEach(function (i) { sets['set' + i.getAttribute('data-set')] = i.value.trim(); });
+      conBoton(el, api('adminGuardarResultado', Object.assign({ idPartido: bloque.getAttribute('data-partido') }, sets))).then(function (r) {
+        x.r.partido = Object.assign({}, x.r.partido, { estado: r.estado, set1: r.set1, set2: r.set2, set3: r.set3, ganadorId: r.ganadorId });
+        repintarTarjeta(x.card, x.r);
+        toast(r.estado === 'JUGADO' ? 'Resultado guardado ✅ Ya se ve en resultados y posiciones.' : 'Guardado (el partido sigue sin resultado completo).');
+      }).catch(function () {});
+    },
+    'turnos-dia': function (el) { st.fechaEspecial = el.getAttribute('data-fecha'); irTab('horarios'); },
+    'bloquear-franja': function (el) {
+      formBloqueo(el.closest('.org-franja'), { fecha: el.getAttribute('data-fecha'), horaInicio: el.getAttribute('data-ini'), horaFin: el.getAttribute('data-fin'), cancha: '1', motivo: '' });
+    },
+    'nuevo-bloqueo': function () {
+      formBloqueo($('#orgBloqueos .org-row'), { fecha: hoyISO(), horaInicio: '21:00', horaFin: '22:00', cancha: '1', motivo: '' });
+    },
+    'editar-bloqueo': function (el) {
+      var linea = el.closest('[data-bloqueo]');
+      formBloqueo(linea, JSON.parse(linea.getAttribute('data-bloqueo')));
+    },
+    'cerrar-form': function (el) { var f = el.closest('.org-form-bloqueo'); if (f) f.remove(); },
+    'guardar-bloqueo': function (el) {
+      var f = el.closest('.org-form-bloqueo'), id = el.getAttribute('data-id');
+      var v = function (k) { return f.querySelector('[data-b="' + k + '"]').value; };
+      var datos = { id: id, fecha: v('fecha'), horaInicio: v('horaInicio'), horaFin: v('horaFin'), cancha: v('cancha'), motivo: v('motivo') };
+      conBoton(el, api(id ? 'adminEditarBloqueo' : 'adminCrearBloqueo', datos), id ? 'Bloqueo movido' : 'Horario bloqueado').then(function () { irTab(st.tab); }).catch(function () {});
+    },
+    'borrar-bloqueo': function (el) {
+      if (!confirm('¿Quitar este bloqueo? El horario vuelve a estar disponible para reservar.')) return;
+      conBoton(el, api('adminEliminarBloqueo', { id: el.getAttribute('data-id') }), 'Bloqueo quitado').then(function () { irTab(st.tab); }).catch(function () {});
+    },
+    'calcular-turnos': function (el) {
+      st.fechaEspecial = $('#teFecha').value;
+      conBoton(el, api('adminCalcularTurnos', { fecha: $('#teFecha').value, desde: $('#teDesde').value, hasta: $('#teHasta').value, duracion: Number($('#teDur').value) })).then(pintarCalculoTurnos).catch(function () {});
+    },
+    'crear-turnos': function (el) {
+      var d = st.calculo; if (!d) return;
+      var turnos = [];
+      root.querySelectorAll('[data-te]').forEach(function (fila) {
+        if (!fila.querySelector('[data-te-on]').checked) return;
+        var t = d.turnos[Number(fila.getAttribute('data-te'))];
+        turnos.push({ inicio: t.inicio, fin: t.fin, canchas: Number(fila.querySelector('[data-te-canchas]').value) });
+      });
+      if (!turnos.length) { toast('Marcá al menos un turno.', 'error'); return; }
+      conBoton(el, api('adminCrearTurnosFecha', { fecha: d.fecha, turnos: turnos }), turnos.length + ' turno(s) agregados ✅').then(function () { st.calculo = null; vHorarios(); }).catch(function () {});
+    },
+    'borrar-especial': function (el) {
+      if (!confirm('¿Quitar este turno especial?')) return;
+      conBoton(el, api('adminEliminarTurnoFecha', { id: el.getAttribute('data-id') }), 'Turno quitado').then(vHorarios).catch(function () {});
+    },
+    'nueva-clase': function () { formClase({ dia: 1, inicio: '19:00', fin: '20:00', canchas: 1 }); },
+    'editar-clase': function (el) { formClase(JSON.parse(el.closest('[data-clase]').getAttribute('data-clase'))); },
+    'cerrar-form-clase': function () { $('#orgFormClase').innerHTML = ''; },
+    'guardar-clase': function (el) {
+      var datos = { id: el.getAttribute('data-id') || undefined, dia: Number($('#kDia').value), inicio: $('#kIni').value, fin: $('#kFin').value, canchas: Number($('#kCanchas').value), profe: $('#kProfe').value };
+      conBoton(el, api('adminGuardarClase', datos), 'Clase guardada').then(vHorarios).catch(function () {});
+    },
+    'borrar-clase': function (el) {
+      if (!confirm('¿Eliminar esta clase fija?')) return;
+      conBoton(el, api('adminEliminarClase', { id: el.getAttribute('data-id') }), 'Clase eliminada').then(vHorarios).catch(function () {});
+    },
+    'g-agregar': function (el) {
+      var gd = el.closest('[data-gdia]');
+      gd.insertAdjacentHTML('beforeend', filaGrilla({ inicio: '', fin: '', canchas: '' }, gd.getAttribute('data-gdia')));
+    },
     'guardar-grilla': function (el) {
       var franjas = [];
       root.querySelectorAll('[data-gdia]').forEach(function (d) {
@@ -716,6 +959,8 @@
       if (!confirm('¿Guardar los turnos? Las reservas ya hechas no se tocan; el cambio afecta lo que se ofrece desde ahora.')) return;
       conBoton(el, api('adminGuardarGrilla', { franjas: franjas }), 'Turnos guardados').then(vHorarios).catch(function () {});
     },
+
+
     'guardar-config': function (el) {
       var valores = {};
       root.querySelectorAll('[data-cfg]').forEach(function (i) { valores[i.getAttribute('data-cfg')] = i.value; });
@@ -762,6 +1007,17 @@
 
   function manejarCambio(e) {
     var t = e.target;
+    var fila = t.closest && t.closest('[data-gdia] .org-gfila');
+    if (fila && (t.getAttribute('data-g') === 'inicio' || t.getAttribute('data-g') === 'fin')) {
+      var dia = fila.closest('[data-gdia]').getAttribute('data-gdia');
+      var ini = fila.querySelector('[data-g="inicio"]').value, fin = fila.querySelector('[data-g="fin"]').value;
+      var lib = libresPorClases(dia, ini, fin), canchas = fila.querySelector('[data-g="canchas"]');
+      if (lib !== null && !canchas.value) canchas.value = lib;
+      var lbl = fila.querySelector('[data-g="libres"]');
+      lbl.textContent = lib === null ? '' : 'libres: ' + lib;
+      lbl.classList.toggle('is-aviso', lib !== null && Number(canchas.value) > lib);
+      return;
+    }
     if (t.hasAttribute('data-fej-cat')) {
       var cat = t.getAttribute('data-fej-cat');
       api('adminFechaEnJuego', { categoria: cat, fecha: t.value === '' ? '' : Number(t.value) }).then(function () {
