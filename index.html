@@ -12,6 +12,20 @@
 <link rel="apple-touch-icon" href="liga360-icon.svg">
 <link rel="icon" type="image/svg+xml" href="liga360-icon.svg">
 <link rel="manifest" href="manifest.webmanifest">
+<script>
+// Link del organizador (?admin=1 o /organizador/): si se agrega a la pantalla
+// de inicio queda como un ícono aparte que abre directo el panel.
+(function () {
+  if (!/[?&]admin=1(&|$)/.test(location.search)) return;
+  document.documentElement.classList.add('modo-org');
+  var m = document.querySelector('link[rel="manifest"]');
+  if (!m) { m = document.createElement('link'); m.rel = 'manifest'; document.head.appendChild(m); }
+  m.href = 'manifest-organizador.webmanifest';
+  var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (t) t.content = 'Organizador';
+  document.title = 'Organizador · Liga 360';
+})();
+</script>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
