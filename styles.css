@@ -137,7 +137,8 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .hero-photo{position:relative;overflow:hidden;aspect-ratio:3/4;max-height:640px}
 .hero-bg{
   position:absolute;inset:0;
-  background:url('hero-liga.png') center top/cover no-repeat, var(--bg);
+  background:url('hero-liga.jpg') center top/cover no-repeat, var(--bg);
+  background-image:image-set(url('hero-liga.webp') type('image/webp'), url('hero-liga.jpg') type('image/jpeg'));
   filter:brightness(1.22) contrast(1.04);
 }
 /* Dos velos largos y progresivos, solo en los extremos -- una curva de

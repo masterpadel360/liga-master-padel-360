@@ -17,7 +17,8 @@
 <meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261012">
+<link rel="stylesheet" href="organizador.css?v=20261012">
 </head>
 <body>
 
@@ -221,6 +222,7 @@
         <button class="more-item" data-go="sponsors"><span class="mi-ic"><svg class="ic"><use href="#icon-heart"/></svg></span><span class="mi-tx">Sponsors</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="sobre-liga"><span class="mi-ic"><svg class="ic"><use href="#icon-info"/></svg></span><span class="mi-tx">Sobre la liga</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
         <button class="more-item" data-go="contacto"><span class="mi-ic"><svg class="ic"><use href="#icon-mail"/></svg></span><span class="mi-tx">Contacto</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
+        <button class="more-item more-item-org" data-go="admin-reservas"><span class="mi-ic"><svg class="ic"><use href="#icon-lock"/></svg></span><span class="mi-tx">Panel de organizador</span><svg class="ic mi-chev"><use href="#icon-chevron"/></svg></button>
       </div>
     </section>
 
@@ -433,9 +435,9 @@
 
         <h2 class="rsv-panel-title">Comprobante de la seña</h2>
         <label class="rsv-upload" id="rsvUploadLabel">
-          <input type="file" id="rsvComprobante" accept="image/jpeg,image/png" hidden>
+          <input type="file" id="rsvComprobante" accept="image/*,application/pdf" hidden>
           <span class="rsv-upload-ic"><svg class="ic"><use href="#icon-image"/></svg></span>
-          <span class="rsv-upload-tx" id="rsvUploadTx">Subí una captura de pantalla del comprobante (JPG o PNG, máx. 5 MB)</span>
+          <span class="rsv-upload-tx" id="rsvUploadTx">Subí una captura de pantalla del comprobante (foto o PDF)</span>
         </label>
 
         <p class="rsv-error" id="rsv-checkout-error" hidden></p>
@@ -510,34 +512,15 @@
       <div id="rsvGestionContenido"><div class="state-loading">Cargando…</div></div>
     </section>
 
-    <!-- ============ ADMIN: reservas pendientes (vía ?admin=1) ============ -->
-    <!-- Sin link en ningún menú a propósito -- solo se entra escribiendo
-         ?admin=1 en la URL. Pide una contraseña propia, separada de la
-         contraseña general de acceso (ver app.js / CodigoReservasAPI.gs). -->
-    <section class="screen" id="screen-admin-reservas" hidden>
+    <!-- ============ PANEL DE ORGANIZADOR ============ -->
+    <!-- Se entra por "Más → Panel de organizador" o con ?admin=1. Lo arma
+         entero organizador.js; pide la contraseña de organizador. -->
+    <section class="screen screen-org" id="screen-admin-reservas" hidden>
       <header class="screen-brand">
         <img src="logo.png" alt="MASTER PÁDEL 360" class="screen-brand-logo" onerror="this.hidden=true">
-        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360 · ADMIN</span>
+        <span class="screen-brand-tx">MASTER <span class="gold">PÁDEL</span> 360 · ORGANIZADOR</span>
       </header>
-      <a class="back-row" href="./">‹ Salir del panel</a>
-      <div class="screen-head">
-        <h1>Reservas pendientes</h1>
-        <p>Aprobar o rechazar solicitudes</p>
-      </div>
-
-      <div id="admin-gate">
-        <div class="rsv-field">
-          <label for="adminClave">Contraseña de administrador</label>
-          <input type="password" id="adminClave" autocomplete="current-password" placeholder="••••••••">
-        </div>
-        <p class="rsv-error" id="admin-gate-error" hidden></p>
-        <button class="doc-card-btn" id="adminEntrarBtn" type="button">Entrar</button>
-      </div>
-
-      <div id="admin-panel" hidden>
-        <button class="rsv-copy-btn" id="adminRefrescarBtn" type="button">Actualizar lista</button>
-        <div id="adminPendientesLista"><div class="state-loading">Cargando…</div></div>
-      </div>
+      <div id="org-root"><div class="state-loading">Cargando…</div></div>
     </section>
 
   </main>
@@ -566,7 +549,10 @@
   var inicio = document.getElementById('screen-inicio');
   if (inicio) inicio.hidden = false;
 
-  window.addEventListener('pageshow', function () {
+  window.addEventListener('pageshow', function (e) {
+    // Solo cuando Safari restaura la página desde memoria (bfcache); en una
+    // carga normal no hay nada que corregir (y taparía el panel ?admin=1).
+    if (!e || !e.persisted) return;
     var gestion = document.getElementById('screen-reserva-gestion');
     if (gestion) gestion.hidden = true;
     var home = document.getElementById('screen-inicio');
@@ -574,6 +560,7 @@
   });
 })();
 </script>
-<script src="app.js?v=20260918-1735"></script>
+<script src="app.js?v=20261012"></script>
+<script src="organizador.js?v=20261012"></script>
 </body>
 </html>
