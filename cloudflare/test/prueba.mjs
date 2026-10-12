@@ -301,6 +301,20 @@ console.log('12) Sets sin guion, eliminar reserva');
   check((await api('adminEliminarReserva', { idReserva: hist[0].idReserva })).ok === false, 'eliminar exige organizador');
 }
 
+console.log('13) Parejas de baja no se pueden reservar');
+{
+  const cat = datosImport.categorias[0].nombre;
+  await ok('adminFechaEnJuego', A({ categoria: cat, fecha: 99 }));
+  const libres = await ok('partidosDisponibles', { categoria: cat }, 'GET');
+  const x = libres[0];
+  const pareja = (await ok('adminParejas', A({ categoria: cat }))).parejas.find((p) => p.categoria === cat && x.parejaA.includes(p.jugador1));
+  check(!!pareja, 'encuentro la pareja del cruce', x);
+  await ok('adminGuardarPareja', A({ ...pareja, estado: 'BAJA' }));
+  check(!(await ok('partidosDisponibles', { categoria: cat }, 'GET')).some((y) => y.idPartido === x.idPartido), 'cruce con pareja de baja ya no se ofrece');
+  await ok('adminGuardarPareja', A({ ...pareja, estado: 'ACTIVA' }));
+  check((await ok('partidosDisponibles', { categoria: cat }, 'GET')).some((y) => y.idPartido === x.idPartido), 'al reactivarla vuelve a aparecer');
+}
+
 console.log('11) Publicar: reiniciar todo como está en la planilla');
 const antesG = await ok('adminGrilla', A());
 check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');
