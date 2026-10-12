@@ -17,7 +17,7 @@
 // organizador) usa Cloudflare + D1. Si se deja vacío, la app vuelve a
 // usar los dos proyectos viejos de Apps Script, tal cual antes -- sirve
 // como "botón de emergencia" para volver atrás en un minuto.
-var BACKEND_URL = '';
+var BACKEND_URL = 'https://liga-360-api.gabohuppi22.workers.dev/';
 var USA_CLOUDFLARE_ = !!BACKEND_URL;
 var API_URL = BACKEND_URL || 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
 
