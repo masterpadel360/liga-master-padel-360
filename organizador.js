@@ -265,20 +265,21 @@
   // ============================================================ RESERVAS
   var FILTROS_RES = [
     ['pendientes', 'Para aprobar'], ['proximas', 'Confirmadas'], ['porcerrar', 'Por cerrar'],
-    ['completas', 'Completas'], ['rechazadas', 'Rechazadas'], ['historial', 'Historial'],
+    ['completas', 'Completas'], ['rechazadas', 'Rechazadas y canceladas'], ['historial', 'Historial'],
   ];
   var VACIO_RES = {
     pendientes: 'No hay reservas para aprobar. 🙌',
     proximas: 'No hay turnos confirmados por jugar.',
     porcerrar: 'No hay partidos jugados con pagos o resultado pendiente. 🙌',
     completas: 'Todavía no hay reservas completas (jugadas, pagadas y con resultado).',
-    rechazadas: 'No hay reservas rechazadas.',
+    rechazadas: 'No hay reservas rechazadas ni canceladas.',
     historial: 'No se encontraron reservas.',
   };
   var AYUDA_RES = {
     proximas: 'Turnos aprobados que todavía no se jugaron.',
     porcerrar: 'Partidos ya jugados: tildá quién pagó y cargá el resultado. Cuando esté todo, pasan a "Completas".',
     completas: 'Jugadas, pagadas al 100% y con resultado cargado.',
+    rechazadas: 'Reservas rechazadas y turnos cancelados (por ejemplo, partidos suspendidos por lluvia). Esos cruces y horarios ya quedaron libres para reservar de nuevo.',
   };
   function vReservas() {
     var f = st.filtroReservas;
@@ -366,7 +367,7 @@
       (r.comprobanteUrl ? '<a class="admin-comprobante-link" href="' + esc(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante</a>' : '<span class="hint-line">Sin comprobante</span>') +
       (conDetalle ? seccionPagos(r) + seccionResultado(r) : '') +
       (acciones ? '<div class="admin-card-actions">' + acciones + '</div>' : '') +
-      (e === 'RESERVADO' ? '<button class="org-link org-danger" data-org="cancelar-res" data-id="' + esc(r.idReserva) + '" type="button">Cancelar turno</button>' : '') +
+      (e === 'RESERVADO' || (e === 'FINALIZADO' && !(r.partido && r.partido.estado === 'JUGADO')) ? '<button class="org-link org-danger" data-org="cancelar-res" data-id="' + esc(r.idReserva) + '" data-jugada="' + (e === 'FINALIZADO' ? '1' : '') + '" type="button">' + (e === 'FINALIZADO' ? 'Cancelar reserva (no se jugó)' : 'Cancelar turno') + '</button>' : '') +
       '<div class="org-tras" hidden></div>' +
     '</div>';
   }
@@ -803,7 +804,10 @@
     rechazar: function (el) { accionReserva(el, 'rechazar'); },
 
     'cancelar-res': function (el) {
-      if (!confirm('¿Cancelar este turno confirmado? El horario y el cruce vuelven a quedar libres.')) return;
+      var msj = el.getAttribute('data-jugada')
+        ? '¿Cancelar esta reserva? Usalo si el partido no se jugó (lluvia, suspensión). El cruce vuelve a quedar libre para que lo reserven de nuevo.'
+        : '¿Cancelar este turno confirmado? El horario y el cruce vuelven a quedar libres.';
+      if (!confirm(msj)) return;
       conBoton(el, api('adminCancelarReserva', { idReserva: el.getAttribute('data-id') }), 'Turno cancelado').then(vReservas).catch(function () {});
     },
     'sem-prev': function () { st.agendaDesde = sumarDias(st.agendaDesde, -7); vAgenda(); },

@@ -887,7 +887,7 @@ async function aAdminReservas(c) {
   if (filtro === 'pendientes') {
     filas = await todos(c.db, 'SELECT * FROM reservas WHERE aprobada_ts IS NULL AND rechazada_ts IS NULL AND cancelada_ts IS NULL ORDER BY creada_ts');
   } else if (filtro === 'rechazadas') {
-    filas = await todos(c.db, 'SELECT * FROM reservas WHERE rechazada_ts IS NOT NULL ORDER BY rechazada_ts DESC LIMIT 400');
+    filas = await todos(c.db, 'SELECT * FROM reservas WHERE rechazada_ts IS NOT NULL OR cancelada_ts IS NOT NULL ORDER BY COALESCE(cancelada_ts, rechazada_ts) DESC LIMIT 400');
   } else if (filtro === 'proximas' || filtro === 'porcerrar' || filtro === 'completas') {
     filas = await todos(c.db, `SELECT * FROM reservas WHERE aprobada_ts IS NOT NULL AND ${ACTIVA_SQL} ORDER BY fecha, hora_inicio, cancha`);
   } else {
@@ -930,7 +930,11 @@ async function aAdminCancelarReserva(c) {
   if (!r) falla('No se encontró esa reserva.');
   const e = estadoReserva(r);
   if (e === EST.PENDIENTE_APROBACION) falla('Esta reserva está pendiente: usá "Rechazar".');
-  if (e !== EST.RESERVADO) falla('Solo se puede cancelar una reserva aprobada que todavía no se jugó.');
+  if (e !== EST.RESERVADO && e !== EST.FINALIZADO) falla('Esta reserva ya estaba ' + (e === EST.RECHAZADO ? 'rechazada.' : 'cancelada.'));
+  if (e === EST.FINALIZADO && r.id_partido) {
+    const pt = await uno(c.db, 'SELECT estado FROM partidos WHERE id = ?', r.id_partido);
+    if (pt && pt.estado === JUGADO) falla('Este partido tiene resultado cargado. Si no se jugó, borrá primero los sets del resultado y después cancelá.');
+  }
   await ejecutar(c.db, 'UPDATE reservas SET cancelada_ts = ? WHERE id = ? AND cancelada_ts IS NULL', Date.now(), id);
   return { ok: true };
 }

@@ -255,7 +255,7 @@ await ok('adminPagoJugador', A({ idReserva: conf3.idReserva, indice: 3, pagado: 
 check((await ok('consultarReserva', { token: (await api('buscarReserva', { telefono: tras.telefonoSolicitante, codigo: tras.codigoReserva })).data.tokenGestion }, 'GET')).saldoPendiente === 9000, 'destildar un pago vuelve a dejar saldo');
 // etapas
 const rech = await ok('adminReservas', A({ filtro: 'rechazadas' }));
-check(rech.length >= 1 && rech.every((r) => r.estadoReserva === 'RECHAZADO'), 'pestaña rechazadas', rech.length);
+check(rech.length >= 1 && rech.every((r) => r.estadoReserva === 'RECHAZADO' || r.estadoReserva === 'CANCELADO'), 'pestaña rechazadas y canceladas', rech.length);
 const porCerrar = await ok('adminReservas', A({ filtro: 'porcerrar' }));
 check(porCerrar.some((r) => r.idReserva === 'R0001'), 'jugada pero partido sin resultado → por cerrar', porCerrar.map((r) => r.idReserva));
 // R0001: pago completo; si su partido tiene resultado pasa a completas
@@ -263,6 +263,19 @@ const pR1 = porCerrar.find((r) => r.idReserva === 'R0001');
 check(pR1.pagados.every(Boolean), 'reserva vieja con pago completo = 4 tildados');
 const resumen2 = await ok('adminResumen', A());
 check(typeof resumen2.porCerrar === 'number' && resumen2.porCerrar >= 1, 'resumen cuenta las por cerrar', resumen2.porCerrar);
+// partido suspendido (lluvia): se cancela una reserva ya jugada sin resultado y el cruce vuelve a estar libre
+const libresAntes = await ok('partidosDisponibles', { categoria: pR1.categoria }, 'GET');
+const cruceX = libresAntes[0];
+await DB.prepare('UPDATE reservas SET id_partido = ? WHERE id = ?').bind(cruceX.idPartido, 'R0001').run();
+check(!(await ok('partidosDisponibles', { categoria: pR1.categoria }, 'GET')).some((x) => x.idPartido === cruceX.idPartido), 'cruce con reserva jugada no está libre');
+await ok('adminGuardarResultado', A({ idPartido: cruceX.idPartido, set1: '6-4', set2: '6-3', set3: '' }));
+check((await api('adminCancelarReserva', A({ idReserva: 'R0001' }))).error.includes('resultado cargado'), 'no cancela si el partido tiene resultado');
+await ok('adminGuardarResultado', A({ idPartido: cruceX.idPartido, set1: '', set2: '', set3: '' }));
+await ok('adminCancelarReserva', A({ idReserva: 'R0001' }));
+const r1Tras = (await ok('adminReservas', A({ filtro: 'rechazadas' }))).find((r) => r.idReserva === 'R0001');
+check(r1Tras && r1Tras.estadoReserva === 'CANCELADO', 'reserva jugada cancelada aparece en rechazadas/canceladas');
+check((await ok('partidosDisponibles', { categoria: pR1.categoria }, 'GET')).some((x) => x.idPartido === cruceX.idPartido), 'el cruce suspendido vuelve a estar disponible');
+check((await api('adminCancelarReserva', A({ idReserva: 'R0001' }))).ok === false, 'no se cancela dos veces');
 
 console.log('9) Protección al re-importar');
 const reimp = await api('importar', A({ datos: datosImport }));
