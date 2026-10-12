@@ -1765,6 +1765,7 @@ function borrarAcceso_() {
   try { localStorage.removeItem(LS_ACCESO_); } catch (e) { /* nada que borrar si no hay storage */ }
 }
 
+var TEXTO_BTN_ACCESO_ = 'ENTRAR A LA LIGA';
 document.getElementById('accesoBtn').addEventListener('click', function () {
   var err = document.getElementById('access-error');
   err.hidden = true;
@@ -1780,7 +1781,7 @@ document.getElementById('accesoBtn').addEventListener('click', function () {
   // respaldo JSONP y evita que la pantalla de entrada quede clavada.
   reservasApiGet_('verificarAcceso', { clave: clave }).then(function (r) {
     btn.disabled = false;
-    btn.textContent = 'ENTRAR A LA LIGA';
+    btn.textContent = TEXTO_BTN_ACCESO_;
     guardarAcceso_(r.token, r.version);
     document.getElementById('access-gate').hidden = true;
     document.getElementById('app').hidden = false;
@@ -1791,14 +1792,14 @@ document.getElementById('accesoBtn').addEventListener('click', function () {
     // este dispositivo). Los jugadores nunca ven ninguna opción de admin.
     var fallarAcceso = function () {
       btn.disabled = false;
-      btn.textContent = 'ENTRAR A LA LIGA';
+      btn.textContent = TEXTO_BTN_ACCESO_;
       err.hidden = false;
       err.textContent = (e && e.message) || 'No se pudo verificar el acceso. Probá de nuevo.';
     };
     if (!USA_CLOUDFLARE_) { fallarAcceso(); return; }
     reservasApiPost_('adminLogin', { clave: clave }).then(function (r) {
       btn.disabled = false;
-      btn.textContent = 'ENTRAR A LA LIGA';
+      btn.textContent = TEXTO_BTN_ACCESO_;
       guardarTokenOrganizador_(r.tokenAdmin);
       entrarComoOrganizador_ = true;
       document.getElementById('access-gate').hidden = true;
@@ -1852,6 +1853,7 @@ window.addEventListener('pageshow', function (e) {
   // volver a ejecutar DOMContentLoaded. Si restaura "Tu reserva", la
   // normalizamos a Inicio para que refrescar/navegar no quede atrapado.
   if (!e.persisted) return;
+  if (esRutaAdmin_()) { mostrarPanelAdmin_(); return; }
   try { history.replaceState(null, '', location.pathname); } catch (err) {}
   if (document.getElementById('app') && !document.getElementById('app').hidden) {
     irA('inicio');
@@ -1859,6 +1861,13 @@ window.addEventListener('pageshow', function (e) {
 });
 
 window.addEventListener('DOMContentLoaded', function () {
+  if (esRutaAdmin_()) {
+    // Entrada del organizador: la pantalla de clave habla del panel.
+    TEXTO_BTN_ACCESO_ = 'ENTRAR AL PANEL';
+    document.getElementById('accesoBtn').textContent = TEXTO_BTN_ACCESO_;
+    document.querySelector('.access-title').textContent = 'Panel de organizador';
+    document.querySelector('.access-sub').textContent = 'Ingresá tu clave de organizador.';
+  }
   var guardado = leerAccesoGuardado_();
   if (guardado || hayOrganizador_()) {
     document.getElementById('access-gate').hidden = true;
