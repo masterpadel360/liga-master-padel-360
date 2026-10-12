@@ -1736,10 +1736,28 @@ document.getElementById('accesoBtn').addEventListener('click', function () {
     document.getElementById('app').hidden = false;
     arrancarRuteoInicial_(true);
   }).catch(function (e) {
-    btn.disabled = false;
-    btn.textContent = 'ENTRAR A LA LIGA';
-    err.hidden = false;
-    err.textContent = (e && e.message) || 'No se pudo verificar el acceso. Probá de nuevo.';
+    // ¿No es la clave de jugador? Puede ser la del organizador: con esa se
+    // entra directo al panel (y el menú de organizador aparece solo en
+    // este dispositivo). Los jugadores nunca ven ninguna opción de admin.
+    var fallarAcceso = function () {
+      btn.disabled = false;
+      btn.textContent = 'ENTRAR A LA LIGA';
+      err.hidden = false;
+      err.textContent = (e && e.message) || 'No se pudo verificar el acceso. Probá de nuevo.';
+    };
+    if (!USA_CLOUDFLARE_) { fallarAcceso(); return; }
+    reservasApiPost_('adminLogin', { clave: clave }).then(function (r) {
+      btn.disabled = false;
+      btn.textContent = 'ENTRAR A LA LIGA';
+      guardarTokenOrganizador_(r.tokenAdmin);
+      entrarComoOrganizador_ = true;
+      document.getElementById('access-gate').hidden = true;
+      document.getElementById('app').hidden = false;
+      arrancarRuteoInicial_(true);
+    }).catch(function () {
+      e = new Error('Contraseña incorrecta.');
+      fallarAcceso();
+    });
   });
 });
 document.getElementById('accesoClave').addEventListener('keydown', function (e) {
@@ -1750,6 +1768,20 @@ document.getElementById('accesoClave').addEventListener('keydown', function (e) 
 // Panel de organizador (?admin=1 o "Más → Panel de organizador").
 // Toda la lógica vive en organizador.js -- acá solo se lo abre.
 // ============================================================
+var LS_ORG_TOKEN_ = 'mp360_org_token';
+var entrarComoOrganizador_ = false;
+function hayOrganizador_() {
+  try { return !!localStorage.getItem(LS_ORG_TOKEN_); } catch (e) { return false; }
+}
+function guardarTokenOrganizador_(t) {
+  try { localStorage.setItem(LS_ORG_TOKEN_, t); } catch (e) { /* sin storage: pide la clave en el panel */ }
+  actualizarMenuOrganizador_();
+}
+// La opción "Panel de organizador" del menú Más solo existe en los
+// dispositivos donde el organizador ya entró con su clave.
+function actualizarMenuOrganizador_() {
+  document.querySelectorAll('.more-item-org').forEach(function (el) { el.hidden = !hayOrganizador_(); });
+}
 function esRutaAdmin_() {
   try { return new URLSearchParams(location.search).get('admin') === '1'; } catch (e) { return false; }
 }
@@ -1778,7 +1810,7 @@ window.addEventListener('pageshow', function (e) {
 
 window.addEventListener('DOMContentLoaded', function () {
   var guardado = leerAccesoGuardado_();
-  if (guardado) {
+  if (guardado || hayOrganizador_()) {
     document.getElementById('access-gate').hidden = true;
     document.getElementById('app').hidden = false;
     arrancarRuteoInicial_();
@@ -1804,7 +1836,9 @@ function arrancarRuteoInicial_(saltarRevalidacion) {
       if (!r || !r.valido) borrarAcceso_();
     }).catch(function () { /* si falla la red no se toca nada -- no hay motivo para desconfiar */ });
   }
-  if (esRutaAdmin_()) {
+  actualizarMenuOrganizador_();
+  if (esRutaAdmin_() || entrarComoOrganizador_) {
+    entrarComoOrganizador_ = false;
     mostrarPanelAdmin_();
     return;
   }

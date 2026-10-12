@@ -103,7 +103,9 @@ with sync_playwright() as p:
 
     # ---------------- panel de organizador
     page.click('.nav-item[data-nav="mas"]')
-    page.click('.more-item[data-go="admin-reservas"]')
+    assert page.locator('.more-item-org').is_hidden(), 'el jugador ve el panel'
+    ok('el jugador NO ve "Panel de organizador" en Más')
+    page.goto(BASE + '?admin=1')
     page.wait_for_selector('#orgClave')
     foto(page, '07-org-login')
     page.fill('#orgClave', 'mala')
@@ -174,6 +176,32 @@ with sync_playwright() as p:
     page.wait_for_selector('.org-foto img', timeout=15000)
     ok('subió una foto a la galería')
     foto(page, '15-org-contenido')
+
+    page.goto(BASE)
+    page.wait_for_selector('#app:not([hidden])')
+    page.click('.nav-item[data-nav="mas"]')
+    assert page.locator('.more-item-org').is_visible()
+    ok('en el dispositivo del organizador sí aparece en Más')
+
+    # entrada directa con la clave de organizador desde la pantalla inicial
+    ctx2 = nav.new_context(viewport={'width': 390, 'height': 844})
+    p2 = ctx2.new_page()
+    p2.goto(BASE)
+    p2.fill('#accesoClave', 'clave-orga')
+    p2.click('#accesoBtn')
+    p2.wait_for_selector('.org-stats')
+    ok('clave de organizador en la entrada abre directo el panel')
+    p2.goto(BASE)
+    p2.wait_for_selector('#app:not([hidden])')
+    ok('y queda adentro de la app sin pedir la clave de jugador')
+    ctx3 = nav.new_context(viewport={'width': 390, 'height': 844})
+    p3 = ctx3.new_page()
+    p3.goto(BASE)
+    p3.fill('#accesoClave', 'cualquiera')
+    p3.click('#accesoBtn')
+    p3.wait_for_selector('#access-error:not([hidden])')
+    assert 'incorrecta' in p3.text_content('#access-error')
+    ok('clave equivocada: "Contraseña incorrecta"')
 
     # vista de escritorio
     page.set_viewport_size({'width': 1280, 'height': 860})

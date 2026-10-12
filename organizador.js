@@ -48,8 +48,9 @@
     });
   }
   function token() { try { return localStorage.getItem(LS_TOKEN) || ''; } catch (e) { return ''; } }
-  function guardarToken(t) { try { localStorage.setItem(LS_TOKEN, t); } catch (e) {} }
-  function borrarToken() { try { localStorage.removeItem(LS_TOKEN); } catch (e) {} }
+  function refrescarMenu() { if (typeof actualizarMenuOrganizador_ === 'function') actualizarMenuOrganizador_(); }
+  function guardarToken(t) { try { localStorage.setItem(LS_TOKEN, t); } catch (e) {} refrescarMenu(); }
+  function borrarToken() { try { localStorage.removeItem(LS_TOKEN); } catch (e) {} refrescarMenu(); }
   function plata(n) { return '$' + Number(n || 0).toLocaleString('es-AR'); }
   function fechaCorta(iso) {
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
