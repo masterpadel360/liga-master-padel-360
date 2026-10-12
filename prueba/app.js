@@ -364,6 +364,7 @@ function elegirCategoria_(cat) {
   });
   guardarCategoriaElegida_(categoriaActual);
   actualizarSelectorInicio_(false);
+  pintarFechaEnJuego_();
 
   // Un segundo tap sobre la misma categoría no debe volver a lanzar
   // precargas ni repintados. Era una fuente fácil de pedidos duplicados.
@@ -475,7 +476,11 @@ function renderInicio_(datos) {
 
   var elStatus = document.getElementById('hero-status');
 
-  // La fecha visible del Inicio avanza automáticamente cada domingo.
+  // Con el servidor nuevo, la fecha en juego es la que configura el
+  // organizador en su panel (la de la categoría elegida, o la de la liga).
+  if (pintarFechaEnJuego_()) { pintarNovedadesYSponsors_(novedades, sponsors); return; }
+
+  // (Modo planilla) La fecha visible del Inicio avanza automáticamente cada domingo.
   // Domingo 20/09/2026 = Fecha 2; domingo 27/09 = Fecha 3, etc.
   // Usamos fecha calendario (no horas transcurridas) para que cambios de
   // horario/DST del navegador nunca adelanten una fecha por error.
@@ -488,7 +493,30 @@ function renderInicio_(datos) {
   }
   elStatus.hidden = false;
   elStatus.textContent = 'FECHA ' + numeroFecha + ' EN JUEGO';
-
+  pintarNovedadesYSponsors_(novedades, sponsors);
+}
+var FECHAS_EN_JUEGO_ = null;
+function pintarFechaEnJuego_() {
+  if (!FECHAS_EN_JUEGO_) return false;
+  var n = categoriaActual ? FECHAS_EN_JUEGO_[categoriaActual] : null;
+  if (!n) {
+    // Sin categoría elegida: la fecha que tiene la mayoría de las categorías.
+    var cuenta = {}, mejor = null;
+    Object.keys(FECHAS_EN_JUEGO_).forEach(function (k) {
+      var v = FECHAS_EN_JUEGO_[k];
+      if (!v) return;
+      cuenta[v] = (cuenta[v] || 0) + 1;
+      if (mejor === null || cuenta[v] > cuenta[mejor] || (cuenta[v] === cuenta[mejor] && v > mejor)) mejor = v;
+    });
+    n = mejor;
+  }
+  var el = document.getElementById('hero-status');
+  if (!el) return true;
+  el.hidden = !n;
+  if (n) el.textContent = 'FECHA ' + n + ' EN JUEGO';
+  return true;
+}
+function pintarNovedadesYSponsors_(novedades, sponsors) {
   document.getElementById('novedades').innerHTML = novedades.map(function (n) {
     return '<div class="news-card"><b>' + esc_(n.titulo) + '</b><span>' + esc_(n.texto) + '</span></div>';
   }).join('');
@@ -1487,6 +1515,10 @@ function reservarPintarExito_(datos) {
   document.getElementById('rsv-exito-codigo').textContent = datos.codigoReserva || '';
   var link = document.getElementById('rsvGestionarLink');
   link.href = location.pathname + '?token=' + encodeURIComponent(datos.tokenGestion);
+  waReservaEnviado_ = false;
+  document.getElementById('rsvWaAlerta').classList.remove('is-enviado');
+  document.getElementById('rsvWaTitulo').textContent = '⚠️ ATENCIÓN: FALTA UN PASO';
+  document.getElementById('rsvWaTexto').textContent = 'Mandá tu reserva por WhatsApp para que el organizador la vea y la apruebe.';
   var linkWa = document.getElementById('rsvWhatsappLink');
   linkWa.href = 'https://wa.me/' + WHATSAPP_NUMERO_ADMIN_ + '?text=' + encodeURIComponent(construirMensajeWhatsapp_(datos));
 
@@ -1513,6 +1545,25 @@ function reservarPintarExito_(datos) {
 // dispararía calentarReservasApi_ de nuevo) -- ya estamos adentro de
 // screen-reservar, así que alcanza con cambiar de paso, sin ningún
 // pedido de red.
+// Aviso de WhatsApp: al tocarlo se marca como enviado; si el jugador quiere
+// salir de la pantalla sin haberlo tocado, se le recuerda antes.
+var waReservaEnviado_ = false;
+document.getElementById('rsvWhatsappLink').addEventListener('click', function () {
+  waReservaEnviado_ = true;
+  document.getElementById('rsvWaAlerta').classList.add('is-enviado');
+  document.getElementById('rsvWaTitulo').textContent = '✅ ¡Gracias!';
+  document.getElementById('rsvWaTexto').textContent = 'Si WhatsApp no se abrió o no llegaste a tocar "Enviar", apretá el botón de nuevo.';
+});
+function confirmarSalidaSinWhatsapp_() {
+  if (waReservaEnviado_) return true;
+  return window.confirm('Todavía no mandaste tu reserva por WhatsApp. Sin ese mensaje el organizador no se entera.\n\n¿Salir igual?');
+}
+document.getElementById('rsv-panel-exito').addEventListener('click', function (e) {
+  var el = e.target.closest('[data-go], #rsvVolverAReservar, #rsvGestionarLink');
+  if (!el) return;
+  if (!confirmarSalidaSinWhatsapp_()) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  waReservaEnviado_ = true; // ya avisado: no volver a preguntar
+}, true);
 document.getElementById('rsvVolverAReservar').addEventListener('click', function () {
   reservaCruces_ = [];
   reservarRenderCategorias_();
@@ -1907,6 +1958,7 @@ function arrancarApp_() {
   apiFetch('bootstrap').then(function (boot) {
   boot = boot || {};
   CATEGORIAS = Array.isArray(boot.categorias) ? boot.categorias.filter(Boolean) : [];
+  FECHAS_EN_JUEGO_ = boot.fechasEnJuego || null;
   guardarCategoriasCache_(CATEGORIAS);
 
   // Categoría guardada de una visita anterior: solo se respeta si sigue
