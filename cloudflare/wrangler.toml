@@ -1,0 +1,12 @@
+name = "liga-360-api"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "liga-360-db"
+database_id = "REEMPLAZAR-CON-EL-ID-DE-LIGA-360-DB"
+
+# Limpieza de retenciones vencidas una vez por hora
+[triggers]
+crons = ["7 * * * *"]

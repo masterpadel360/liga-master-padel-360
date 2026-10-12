@@ -9,7 +9,17 @@
  * IMPORTANTE: reemplazá la constante API_URL de acá abajo por la URL de
  * TU deployment de Apps Script (la misma que ya tenías configurada).
  */
-var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
+// ------------------------------------------------------------
+// SERVIDOR (interruptor de la mudanza a Cloudflare)
+// ------------------------------------------------------------
+// BACKEND_URL = dirección del Worker de Cloudflare (liga-360-api). Con
+// esto completo, TODA la app (posiciones, fixture, reservas y panel de
+// organizador) usa Cloudflare + D1. Si se deja vacío, la app vuelve a
+// usar los dos proyectos viejos de Apps Script, tal cual antes -- sirve
+// como "botón de emergencia" para volver atrás en un minuto.
+var BACKEND_URL = '';
+var USA_CLOUDFLARE_ = !!BACKEND_URL;
+var API_URL = BACKEND_URL || 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budugkr4Ai5gV8R5gBgYabgO0relQ0jaC7ljvLX6wz_rU0t/exec';
 
 // Antes, este fetch() no tenía ningún límite de tiempo propio: si
 // colgaba (una red móvil rara, un DNS lento, etc.) el navegador podía
@@ -25,7 +35,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxebUf2uSFTtcyrySuK_budug
 // llegaba a cortar pedidos que iban a responder bien solos, y el
 // "respaldo" JSONP no es gratis -- rehace la misma llamada lenta desde
 // cero. Cortar antes de tiempo termina saliendo más lento, no más rápido.
-var API_TIMEOUT_MS_ = 15000;
+var API_TIMEOUT_MS_ = USA_CLOUDFLARE_ ? 10000 : 15000;
 
 // ============================================================
 // Cliente de API: intenta fetch() normal; si falla, cae a JSONP.
@@ -243,7 +253,7 @@ var NAV_GRUPO = {
   inicio: 'inicio', posiciones: 'posiciones', fixture: 'fixture', resultados: 'resultados',
   mas: 'mas', playoffs: 'mas', fotos: 'mas', reglamento: 'mas', premios: 'mas',
   sponsors: 'mas', 'sobre-liga': 'mas', contacto: 'mas', reservar: 'mas', 'reserva-gestion': 'mas',
-  'buscar-reserva': 'mas',
+  'buscar-reserva': 'mas', 'admin-reservas': 'mas',
 };
 
 function esc_(s) {
@@ -331,6 +341,7 @@ function cargarPantalla_(pantalla) {
   else if (pantalla === 'sponsors') cargarSponsors_();
   else if (pantalla === 'reservar') { calentarReservasApi_(); iniciarReservarSiHaceFalta_(); }
   else if (pantalla === 'buscar-reserva') { calentarReservasApi_(); buscarReservaResetForm_(); }
+  else if (pantalla === 'admin-reservas') { if (window.Organizador) window.Organizador.abrir(); }
   // 'sobre-liga', 'contacto' y 'reserva-gestion' no piden nada acá: la
   // gestión de reserva se carga aparte, directo desde el arranque (ver
   // más abajo), porque depende del token de la URL, no de la navegación.
@@ -353,6 +364,7 @@ function elegirCategoria_(cat) {
   });
   guardarCategoriaElegida_(categoriaActual);
   actualizarSelectorInicio_(false);
+  pintarFechaEnJuego_();
 
   // Un segundo tap sobre la misma categoría no debe volver a lanzar
   // precargas ni repintados. Era una fuente fácil de pedidos duplicados.
@@ -464,7 +476,11 @@ function renderInicio_(datos) {
 
   var elStatus = document.getElementById('hero-status');
 
-  // La fecha visible del Inicio avanza automáticamente cada domingo.
+  // Con el servidor nuevo, la fecha en juego es la que configura el
+  // organizador en su panel (la de la categoría elegida, o la de la liga).
+  if (pintarFechaEnJuego_()) { pintarNovedadesYSponsors_(novedades, sponsors); return; }
+
+  // (Modo planilla) La fecha visible del Inicio avanza automáticamente cada domingo.
   // Domingo 20/09/2026 = Fecha 2; domingo 27/09 = Fecha 3, etc.
   // Usamos fecha calendario (no horas transcurridas) para que cambios de
   // horario/DST del navegador nunca adelanten una fecha por error.
@@ -477,7 +493,30 @@ function renderInicio_(datos) {
   }
   elStatus.hidden = false;
   elStatus.textContent = 'FECHA ' + numeroFecha + ' EN JUEGO';
-
+  pintarNovedadesYSponsors_(novedades, sponsors);
+}
+var FECHAS_EN_JUEGO_ = null;
+function pintarFechaEnJuego_() {
+  if (!FECHAS_EN_JUEGO_) return false;
+  var n = categoriaActual ? FECHAS_EN_JUEGO_[categoriaActual] : null;
+  if (!n) {
+    // Sin categoría elegida: la fecha que tiene la mayoría de las categorías.
+    var cuenta = {}, mejor = null;
+    Object.keys(FECHAS_EN_JUEGO_).forEach(function (k) {
+      var v = FECHAS_EN_JUEGO_[k];
+      if (!v) return;
+      cuenta[v] = (cuenta[v] || 0) + 1;
+      if (mejor === null || cuenta[v] > cuenta[mejor] || (cuenta[v] === cuenta[mejor] && v > mejor)) mejor = v;
+    });
+    n = mejor;
+  }
+  var el = document.getElementById('hero-status');
+  if (!el) return true;
+  el.hidden = !n;
+  if (n) el.textContent = 'FECHA ' + n + ' EN JUEGO';
+  return true;
+}
+function pintarNovedadesYSponsors_(novedades, sponsors) {
   document.getElementById('novedades').innerHTML = novedades.map(function (n) {
     return '<div class="news-card"><b>' + esc_(n.titulo) + '</b><span>' + esc_(n.texto) + '</span></div>';
   }).join('');
@@ -824,14 +863,13 @@ function renderSponsors_(datos) {
 // porque lee e.postData.contents y lo parsea como JSON sin mirar el
 // Content-Type declarado (ver CodigoReservasAPI.gs, ejecutarAccion_).
 // ============================================================
-var RESERVAS_API_URL = 'https://script.google.com/macros/s/AKfycbxWpBJOCBr8oNLYfoaPAGUbB4KDjDaLJ4ars9B6Zv_f3prrCC-Tz1j-xEELxvvZlaJICQ/exec';
+var RESERVAS_API_URL = BACKEND_URL || 'https://script.google.com/macros/s/AKfycbxWpBJOCBr8oNLYfoaPAGUbB4KDjDaLJ4ars9B6Zv_f3prrCC-Tz1j-xEELxvvZlaJICQ/exec';
 // Mismo criterio que API_TIMEOUT_MS_ arriba: 15s de margen real contra
 // el backend, medido en vivo, en vez de un valor corto que termina
 // provocando un reintento completo (más lento, no más rápido).
 var RSV_TIMEOUT_GET_MS_ = 15000;
 var RSV_TIMEOUT_POST_MS_ = 25000;
 var ALIAS_TRANSFERENCIA_TX_ = 'masterpadel.360';
-var RSV_COMPROBANTE_MAX_BYTES_ = 5 * 1024 * 1024; // 5 MB
 
 function fetchConTimeout_(url, opciones, ms) {
   var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -969,6 +1007,8 @@ function calentarReservasApi_() {
 var RSV_KEEPALIVE_MS_ = 6 * 60 * 1000; // 6 minutos
 var keepAliveTimer_ = null;
 function iniciarKeepAlive_() {
+  // Con Cloudflare no hay "arranque en frío": no hace falta calentar nada.
+  if (USA_CLOUDFLARE_) return;
   if (keepAliveTimer_) return;
   keepAliveTimer_ = setInterval(function () {
     // No gastar cuota de Apps Script con la pestaña en segundo plano --
@@ -1241,7 +1281,7 @@ function reservarPintarResumenCheckout_() {
   document.getElementById('rsvNombre').value = '';
   document.getElementById('rsvTelefono').value = '';
   document.getElementById('rsvComprobante').value = '';
-  document.getElementById('rsvUploadTx').textContent = 'Subí una captura de pantalla del comprobante (JPG o PNG, máx. 5 MB)';
+  document.getElementById('rsvUploadTx').textContent = RSV_TEXTO_UPLOAD_;
   reservaComprobante_ = null;
 }
 document.getElementById('rsvElegirOtroTurno').addEventListener('click', function () {
@@ -1285,38 +1325,88 @@ document.getElementById('rsvCopyAlias').addEventListener('click', function () {
 document.getElementById('rsvCopyCodigo').addEventListener('click', function () {
   copiarAlPortapapeles_(document.getElementById('rsv-exito-codigo').textContent, this, 'Código copiado');
 });
+// Comprobante: las fotos se achican EN EL CELULAR antes de mandarlas (máx.
+// 1600 px, JPG). Una captura de 4 MB pasa a pesar ~200 KB, así la subida
+// tarda un segundo aunque la señal sea mala. Con Cloudflare también se
+// aceptan PDF chicos (comprobantes que algunos bancos mandan así).
+var RSV_COMPROBANTE_LADO_MAX_ = 1600;
+var RSV_COMPROBANTE_ENVIO_MAX_ = 1400000; // bytes, ya comprimido
+var RSV_TEXTO_UPLOAD_ = 'Subí una captura de pantalla del comprobante (foto o PDF)';
+function comprimirImagen_(file) {
+  return new Promise(function (resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var esc = Math.min(1, RSV_COMPROBANTE_LADO_MAX_ / Math.max(img.naturalWidth, img.naturalHeight));
+      var w = Math.max(1, Math.round(img.naturalWidth * esc)), h = Math.max(1, Math.round(img.naturalHeight * esc));
+      var cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      var cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h);
+      cx.drawImage(img, 0, 0, w, h);
+      var calidad = 0.82;
+      var dataUrl = cv.toDataURL('image/jpeg', calidad);
+      while (dataUrl.length * 0.75 > RSV_COMPROBANTE_ENVIO_MAX_ && calidad > 0.4) {
+        calidad -= 0.12;
+        dataUrl = cv.toDataURL('image/jpeg', calidad);
+      }
+      resolve({ base64: dataUrl, tipoMime: 'image/jpeg' });
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('no-decodifica')); };
+    img.src = url;
+  });
+}
+function leerComoDataUrl_(file) {
+  return new Promise(function (resolve, reject) {
+    var lector = new FileReader();
+    lector.onload = function () { resolve(lector.result); };
+    lector.onerror = function () { reject(new Error('No se pudo leer el archivo.')); };
+    lector.readAsDataURL(file);
+  });
+}
 document.getElementById('rsvComprobante').addEventListener('change', function (e) {
   var file = e.target.files && e.target.files[0];
   var tx = document.getElementById('rsvUploadTx');
+  var input = e.target;
   document.getElementById('rsv-checkout-error').hidden = true;
   document.getElementById('rsv-checkout-err-actions').hidden = true;
+  reservaComprobante_ = null;
   if (!file) return;
-  // El "accept" del input ya filtra en el selector de archivos, pero
-  // algunos navegadores/flujos (arrastrar y soltar, cámara) lo pueden
-  // saltear -- se revalida acá antes de subir nada.
-  if (['image/jpeg', 'image/png'].indexOf(file.type) === -1) {
-    reservarMostrarErrorCheckout_('Subí una captura en JPG o PNG (el archivo elegido es ' + (file.type || 'de otro tipo') + ').', false);
+  function rechazar(msg) {
+    reservarMostrarErrorCheckout_(msg, false);
     reservaComprobante_ = null;
-    e.target.value = '';
-    tx.textContent = 'Subí una captura de pantalla del comprobante (JPG o PNG, máx. 5 MB)';
+    input.value = '';
+    tx.textContent = RSV_TEXTO_UPLOAD_;
+  }
+  var esPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (esPdf) {
+    if (!USA_CLOUDFLARE_) return rechazar('Subí una captura en JPG o PNG.');
+    if (file.size > RSV_COMPROBANTE_ENVIO_MAX_) return rechazar('Ese PDF pesa demasiado. Sacale una captura de pantalla al comprobante y subí la imagen.');
+    tx.textContent = 'Preparando…';
+    leerComoDataUrl_(file).then(function (dataUrl) {
+      reservaComprobante_ = { base64: dataUrl, nombreArchivo: file.name, tipoMime: 'application/pdf' };
+      tx.textContent = 'Seleccionado: ' + file.name;
+    }, function () { rechazar('No se pudo leer el archivo. Probá con otro.'); });
     return;
   }
-  if (file.size > RSV_COMPROBANTE_MAX_BYTES_) {
-    reservarMostrarErrorCheckout_('La imagen pesa demasiado (máximo 5 MB). Elegí otra o sacale una captura más chica.', false);
-    reservaComprobante_ = null;
-    e.target.value = '';
-    tx.textContent = 'Subí una captura de pantalla del comprobante (JPG o PNG, máx. 5 MB)';
-    return;
-  }
-  var lector = new FileReader();
-  lector.onload = function () {
-    reservaComprobante_ = { base64: lector.result, nombreArchivo: file.name, tipoMime: file.type || 'image/jpeg' };
+  if (file.type && file.type.indexOf('image/') !== 0) return rechazar('Subí una foto o captura del comprobante (o un PDF).');
+  tx.textContent = 'Preparando imagen…';
+  comprimirImagen_(file).then(function (r) {
+    reservaComprobante_ = { base64: r.base64, nombreArchivo: file.name.replace(/\.\w+$/, '') + '.jpg', tipoMime: r.tipoMime };
     tx.textContent = 'Seleccionado: ' + file.name;
-  };
-  lector.onerror = function () {
-    reservarMostrarErrorCheckout_('No se pudo leer el archivo. Probá con otra imagen.', false);
-  };
-  lector.readAsDataURL(file);
+  }).catch(function () {
+    // El navegador no pudo abrir la imagen (p.ej. HEIC en Android): se manda
+    // tal cual si es JPG/PNG y no es enorme.
+    if (['image/jpeg', 'image/png'].indexOf(file.type) !== -1 && file.size <= RSV_COMPROBANTE_ENVIO_MAX_) {
+      leerComoDataUrl_(file).then(function (dataUrl) {
+        reservaComprobante_ = { base64: dataUrl, nombreArchivo: file.name, tipoMime: file.type };
+        tx.textContent = 'Seleccionado: ' + file.name;
+      }, function () { rechazar('No se pudo leer el archivo. Probá con otra imagen.'); });
+    } else {
+      rechazar('No pudimos abrir esa imagen. Sacale una captura de pantalla al comprobante y subí esa.');
+    }
+  });
 });
 document.getElementById('rsvConfirmarBtn').addEventListener('click', function () {
   if (reservaEnvioEnCurso_) return; // evita doble click / doble envío
@@ -1414,7 +1504,6 @@ function reservarPintarExito_(datos) {
     '<div class="rsv-summary-row"><span>Cruce</span><b>' + esc_(datos.parejaA) + ' vs ' + esc_(datos.parejaB) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Fecha</span><b>' + esc_(formatearFechaLarga_(datos.fecha)) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Horario</span><b>' + esc_(formatearHorarioSeguro_(datos.horarioInicio)) + ' - ' + esc_(formatearHorarioSeguro_(datos.horarioFin)) + '</b></div>' +
-    (datos.cancha ? '<div class="rsv-summary-row"><span>Cancha</span><b>Cancha ' + esc_(datos.cancha) + '</b></div>' : '') +
     '<div class="rsv-summary-row"><span>Seña pagada</span><b>' + formatearMonto_(datos.montoPagado) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Saldo pendiente</span><b>' + formatearMonto_(datos.saldoPendiente) + '</b></div>' +
     // El backend siempre devuelve PENDIENTE_APROBACION acá (confirmarReserva
@@ -1425,6 +1514,10 @@ function reservarPintarExito_(datos) {
   document.getElementById('rsv-exito-codigo').textContent = datos.codigoReserva || '';
   var link = document.getElementById('rsvGestionarLink');
   link.href = location.pathname + '?token=' + encodeURIComponent(datos.tokenGestion);
+  waReservaEnviado_ = false;
+  document.getElementById('rsvWaAlerta').classList.remove('is-enviado');
+  document.getElementById('rsvWaTitulo').textContent = '⚠️ ATENCIÓN: FALTA UN PASO';
+  document.getElementById('rsvWaTexto').textContent = 'Mandá tu reserva por WhatsApp para que el organizador la vea y la apruebe.';
   var linkWa = document.getElementById('rsvWhatsappLink');
   linkWa.href = 'https://wa.me/' + WHATSAPP_NUMERO_ADMIN_ + '?text=' + encodeURIComponent(construirMensajeWhatsapp_(datos));
 
@@ -1451,6 +1544,25 @@ function reservarPintarExito_(datos) {
 // dispararía calentarReservasApi_ de nuevo) -- ya estamos adentro de
 // screen-reservar, así que alcanza con cambiar de paso, sin ningún
 // pedido de red.
+// Aviso de WhatsApp: al tocarlo se marca como enviado; si el jugador quiere
+// salir de la pantalla sin haberlo tocado, se le recuerda antes.
+var waReservaEnviado_ = false;
+document.getElementById('rsvWhatsappLink').addEventListener('click', function () {
+  waReservaEnviado_ = true;
+  document.getElementById('rsvWaAlerta').classList.add('is-enviado');
+  document.getElementById('rsvWaTitulo').textContent = '✅ ¡Gracias!';
+  document.getElementById('rsvWaTexto').textContent = 'Si WhatsApp no se abrió o no llegaste a tocar "Enviar", apretá el botón de nuevo.';
+});
+function confirmarSalidaSinWhatsapp_() {
+  if (waReservaEnviado_) return true;
+  return window.confirm('Todavía no mandaste tu reserva por WhatsApp. Sin ese mensaje el organizador no se entera.\n\n¿Salir igual?');
+}
+document.getElementById('rsv-panel-exito').addEventListener('click', function (e) {
+  var el = e.target.closest('[data-go], #rsvVolverAReservar, #rsvGestionarLink');
+  if (!el) return;
+  if (!confirmarSalidaSinWhatsapp_()) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  waReservaEnviado_ = true; // ya avisado: no volver a preguntar
+}, true);
 document.getElementById('rsvVolverAReservar').addEventListener('click', function () {
   reservaCruces_ = [];
   reservarRenderCategorias_();
@@ -1653,6 +1765,7 @@ function borrarAcceso_() {
   try { localStorage.removeItem(LS_ACCESO_); } catch (e) { /* nada que borrar si no hay storage */ }
 }
 
+var TEXTO_BTN_ACCESO_ = 'ENTRAR A LA LIGA';
 document.getElementById('accesoBtn').addEventListener('click', function () {
   var err = document.getElementById('access-error');
   err.hidden = true;
@@ -1668,16 +1781,34 @@ document.getElementById('accesoBtn').addEventListener('click', function () {
   // respaldo JSONP y evita que la pantalla de entrada quede clavada.
   reservasApiGet_('verificarAcceso', { clave: clave }).then(function (r) {
     btn.disabled = false;
-    btn.textContent = 'ENTRAR A LA LIGA';
+    btn.textContent = TEXTO_BTN_ACCESO_;
     guardarAcceso_(r.token, r.version);
     document.getElementById('access-gate').hidden = true;
     document.getElementById('app').hidden = false;
     arrancarRuteoInicial_(true);
   }).catch(function (e) {
-    btn.disabled = false;
-    btn.textContent = 'ENTRAR A LA LIGA';
-    err.hidden = false;
-    err.textContent = (e && e.message) || 'No se pudo verificar el acceso. Probá de nuevo.';
+    // ¿No es la clave de jugador? Puede ser la del organizador: con esa se
+    // entra directo al panel (y el menú de organizador aparece solo en
+    // este dispositivo). Los jugadores nunca ven ninguna opción de admin.
+    var fallarAcceso = function () {
+      btn.disabled = false;
+      btn.textContent = TEXTO_BTN_ACCESO_;
+      err.hidden = false;
+      err.textContent = (e && e.message) || 'No se pudo verificar el acceso. Probá de nuevo.';
+    };
+    if (!USA_CLOUDFLARE_) { fallarAcceso(); return; }
+    reservasApiPost_('adminLogin', { clave: clave }).then(function (r) {
+      btn.disabled = false;
+      btn.textContent = TEXTO_BTN_ACCESO_;
+      guardarTokenOrganizador_(r.tokenAdmin);
+      entrarComoOrganizador_ = true;
+      document.getElementById('access-gate').hidden = true;
+      document.getElementById('app').hidden = false;
+      arrancarRuteoInicial_(true);
+    }).catch(function () {
+      e = new Error('Contraseña incorrecta.');
+      fallarAcceso();
+    });
   });
 });
 document.getElementById('accesoClave').addEventListener('keydown', function (e) {
@@ -1685,136 +1816,29 @@ document.getElementById('accesoClave').addEventListener('keydown', function (e) 
 });
 
 // ============================================================
-// Panel admin: reservas pendientes (solo vía ?admin=1, sin link en
-// ningún menú). Contraseña separada de la general -- se guarda en
-// sessionStorage (se borra sola al cerrar la pestaña, a propósito: es
-// más sensible que el acceso general, así que no conviene que quede
-// guardada indefinidamente como la otra).
+// Panel de organizador (?admin=1 o "Más → Panel de organizador").
+// Toda la lógica vive en organizador.js -- acá solo se lo abre.
 // ============================================================
-var SS_ADMIN_CLAVE_ = 'mp360_admin_clave';
-function leerClaveAdminGuardada_() {
-  try { return sessionStorage.getItem(SS_ADMIN_CLAVE_) || ''; } catch (e) { return ''; }
+var LS_ORG_TOKEN_ = 'mp360_org_token';
+var entrarComoOrganizador_ = false;
+function hayOrganizador_() {
+  try { return !!localStorage.getItem(LS_ORG_TOKEN_); } catch (e) { return false; }
 }
-function guardarClaveAdmin_(clave) {
-  try { sessionStorage.setItem(SS_ADMIN_CLAVE_, clave); } catch (e) { /* si no se puede guardar, vuelve a pedir la clave dentro de esta misma sesión */ }
+function guardarTokenOrganizador_(t) {
+  try { localStorage.setItem(LS_ORG_TOKEN_, t); } catch (e) { /* sin storage: pide la clave en el panel */ }
+  actualizarMenuOrganizador_();
+}
+// La opción "Panel de organizador" del menú Más solo existe en los
+// dispositivos donde el organizador ya entró con su clave.
+function actualizarMenuOrganizador_() {
+  document.querySelectorAll('.more-item-org').forEach(function (el) { el.hidden = !hayOrganizador_(); });
 }
 function esRutaAdmin_() {
   try { return new URLSearchParams(location.search).get('admin') === '1'; } catch (e) { return false; }
 }
-
 function mostrarPanelAdmin_() {
   irA('admin-reservas');
-  var claveGuardada = leerClaveAdminGuardada_();
-  if (claveGuardada) {
-    document.getElementById('admin-gate').hidden = true;
-    document.getElementById('admin-panel').hidden = false;
-    adminCargarPendientes_(claveGuardada);
-  } else {
-    document.getElementById('admin-gate').hidden = false;
-    document.getElementById('admin-panel').hidden = true;
-  }
 }
-function adminCargarPendientes_(clave, alTerminar) {
-  var cont = document.getElementById('adminPendientesLista');
-  cont.innerHTML = '<div class="state-loading">Cargando…</div>';
-  reservasApiPost_('listarPendientes', { clave: clave }).then(function (lista) {
-    if (alTerminar) alTerminar(true);
-    adminRenderPendientes_(lista);
-  }).catch(function (e) {
-    if (alTerminar) { alTerminar(false); return; } // el gate ya muestra el error -- no pisar el panel
-    cont.innerHTML = '<p class="state-empty">' + esc_((e && e.message) || 'No se pudo cargar la lista.') + '</p>';
-  });
-}
-function adminRenderPendientes_(lista) {
-  var cont = document.getElementById('adminPendientesLista');
-  if (!lista.length) {
-    cont.innerHTML = '<p class="state-empty">No hay reservas pendientes de aprobación por ahora.</p>';
-    return;
-  }
-  cont.innerHTML = lista.map(function (r) {
-    return '<div class="admin-card" data-admin-card="' + esc_(r.idReserva) + '">' +
-      '<div class="admin-card-row"><span>Categoría</span><b>' + esc_(r.categoria) + '</b></div>' +
-      '<div class="admin-card-row"><span>Cruce</span><b>' + esc_(r.parejaA) + ' vs ' + esc_(r.parejaB) + '</b></div>' +
-      '<div class="admin-card-row"><span>Fecha</span><b>' + esc_(formatearFechaLarga_(r.fecha)) + '</b></div>' +
-      '<div class="admin-card-row"><span>Horario</span><b>' + esc_(formatearHorarioSeguro_(r.horarioInicio)) + ' - ' + esc_(formatearHorarioSeguro_(r.horarioFin)) + '</b></div>' +
-      '<div class="admin-card-row"><span>Cancha</span><b>' + (r.cancha ? 'Cancha ' + esc_(r.cancha) : '—') + '</b></div>' +
-      '<div class="admin-card-row"><span>Nombre</span><b>' + esc_(r.nombreSolicitante) + '</b></div>' +
-      '<div class="admin-card-row"><span>Teléfono</span><b>' + esc_(r.telefonoSolicitante) + '</b></div>' +
-      '<div class="admin-card-row"><span>Monto</span><b>' + formatearMonto_(r.montoPagado) + '</b></div>' +
-      '<div class="admin-card-row"><span>Código</span><b>' + esc_(r.codigoReserva) + '</b></div>' +
-      (r.comprobanteUrl
-        ? '<a class="admin-comprobante-link" href="' + esc_(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante</a>'
-        : '<span class="hint-line">Sin comprobante</span>') +
-      '<p class="rsv-error" id="admin-error-' + esc_(r.idReserva) + '" hidden></p>' +
-      '<div class="admin-card-actions">' +
-        '<button class="rsv-btn-ghost" data-admin-rechazar="' + esc_(r.idReserva) + '" type="button">Rechazar</button>' +
-        '<button class="rsv-btn-aprobar" data-admin-aprobar="' + esc_(r.idReserva) + '" type="button">Aprobar</button>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-document.getElementById('adminEntrarBtn').addEventListener('click', function () {
-  var err = document.getElementById('admin-gate-error');
-  err.hidden = true;
-  var clave = document.getElementById('adminClave').value;
-  if (!clave) { err.hidden = false; err.textContent = 'Ingresá la contraseña de administrador.'; return; }
-
-  var btn = this;
-  btn.disabled = true;
-  btn.textContent = 'Entrando…';
-  adminCargarPendientes_(clave, function (ok) {
-    btn.disabled = false;
-    btn.textContent = 'Entrar';
-    if (ok) {
-      guardarClaveAdmin_(clave);
-      document.getElementById('admin-gate').hidden = true;
-      document.getElementById('admin-panel').hidden = false;
-    } else {
-      err.hidden = false;
-      err.textContent = 'Contraseña incorrecta.';
-    }
-  });
-});
-document.getElementById('adminClave').addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') document.getElementById('adminEntrarBtn').click();
-});
-document.getElementById('adminRefrescarBtn').addEventListener('click', function () {
-  adminCargarPendientes_(leerClaveAdminGuardada_());
-});
-// Aprobar/rechazar: deshabilita TODOS los botones de esa tarjeta mientras
-// procesa (evita doble click) y, si sale bien, saca la tarjeta de la
-// lista -- ya dejó de estar pendiente, no hace falta refrescar todo.
-var adminProcesando_ = {};
-document.addEventListener('click', function (e) {
-  var elAprobar = e.target.closest('[data-admin-aprobar]');
-  var elRechazar = e.target.closest('[data-admin-rechazar]');
-  var el = elAprobar || elRechazar;
-  if (!el) return;
-  var idReserva = el.getAttribute(elAprobar ? 'data-admin-aprobar' : 'data-admin-rechazar');
-  if (adminProcesando_[idReserva]) return;
-  adminProcesando_[idReserva] = true;
-
-  var accion = elAprobar ? 'aprobarReserva' : 'rechazarReserva';
-  var card = el.closest('.admin-card');
-  var errEl = document.getElementById('admin-error-' + idReserva);
-  if (errEl) errEl.hidden = true;
-  if (card) card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
-  el.textContent = elAprobar ? 'Aprobando…' : 'Rechazando…';
-
-  reservasApiPost_(accion, { clave: leerClaveAdminGuardada_(), idReserva: idReserva }).then(function () {
-    delete adminProcesando_[idReserva];
-    if (card) card.remove();
-    var lista = document.getElementById('adminPendientesLista');
-    if (lista && !lista.querySelector('.admin-card')) {
-      lista.innerHTML = '<p class="state-empty">No hay reservas pendientes de aprobación por ahora.</p>';
-    }
-  }).catch(function (err) {
-    delete adminProcesando_[idReserva];
-    if (card) card.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
-    el.textContent = elAprobar ? 'Aprobar' : 'Rechazar';
-    if (errEl) { errEl.hidden = false; errEl.textContent = (err && err.message) || 'No se pudo procesar. Probá de nuevo.'; }
-  });
-});
 
 // ============================================================
 // Arranque
@@ -1829,6 +1853,7 @@ window.addEventListener('pageshow', function (e) {
   // volver a ejecutar DOMContentLoaded. Si restaura "Tu reserva", la
   // normalizamos a Inicio para que refrescar/navegar no quede atrapado.
   if (!e.persisted) return;
+  if (esRutaAdmin_()) { mostrarPanelAdmin_(); return; }
   try { history.replaceState(null, '', location.pathname); } catch (err) {}
   if (document.getElementById('app') && !document.getElementById('app').hidden) {
     irA('inicio');
@@ -1836,8 +1861,15 @@ window.addEventListener('pageshow', function (e) {
 });
 
 window.addEventListener('DOMContentLoaded', function () {
+  if (esRutaAdmin_()) {
+    // Entrada del organizador: la pantalla de clave habla del panel.
+    TEXTO_BTN_ACCESO_ = 'ENTRAR AL PANEL';
+    document.getElementById('accesoBtn').textContent = TEXTO_BTN_ACCESO_;
+    document.querySelector('.access-title').textContent = 'Panel de organizador';
+    document.querySelector('.access-sub').textContent = 'Ingresá tu clave de organizador.';
+  }
   var guardado = leerAccesoGuardado_();
-  if (guardado) {
+  if (guardado || hayOrganizador_()) {
     document.getElementById('access-gate').hidden = true;
     document.getElementById('app').hidden = false;
     arrancarRuteoInicial_();
@@ -1863,7 +1895,9 @@ function arrancarRuteoInicial_(saltarRevalidacion) {
       if (!r || !r.valido) borrarAcceso_();
     }).catch(function () { /* si falla la red no se toca nada -- no hay motivo para desconfiar */ });
   }
-  if (esRutaAdmin_()) {
+  actualizarMenuOrganizador_();
+  if (esRutaAdmin_() || entrarComoOrganizador_) {
+    entrarComoOrganizador_ = false;
     mostrarPanelAdmin_();
     return;
   }
@@ -1932,6 +1966,7 @@ function arrancarApp_() {
   apiFetch('bootstrap').then(function (boot) {
   boot = boot || {};
   CATEGORIAS = Array.isArray(boot.categorias) ? boot.categorias.filter(Boolean) : [];
+  FECHAS_EN_JUEGO_ = boot.fechasEnJuego || null;
   guardarCategoriasCache_(CATEGORIAS);
 
   // Categoría guardada de una visita anterior: solo se respeta si sigue

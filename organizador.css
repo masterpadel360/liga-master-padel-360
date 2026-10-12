@@ -1,0 +1,204 @@
+/* ============================================================
+   Panel de organizador — mismo lenguaje negro/dorado de la app.
+   Pensado para usar desde el celular; en compu se ensancha.
+   ============================================================ */
+@media (min-width:900px){
+  .screen.screen-org{max-width:860px}
+}
+.screen-org{gap:14px}
+#org-root{display:flex;flex-direction:column;gap:14px}
+
+.org-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:14px;display:flex;flex-direction:column;gap:10px;
+}
+.org-card h2,.org-card h3,.org-dia h3{margin:0;font-family:'Barlow Condensed',sans-serif;font-size:1.15rem;font-weight:800;text-transform:uppercase;letter-spacing:.02em}
+.org-card h2{font-size:1.5rem}
+.org-card h4{margin:6px 0 0;font-size:.72rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em}
+.org-muted{color:var(--text-dim);font-size:.78rem;margin:0}
+.org-mini{font-size:.72rem}
+.org-login{max-width:380px;width:100%;margin:10px auto 0}
+.org-btn-full{width:100%;border:none;cursor:pointer;text-align:center;display:block}
+
+.org-top{display:flex;align-items:center;justify-content:space-between}
+.org-link{color:var(--gold);font-size:.78rem;font-weight:800;padding:6px 4px;background:none;white-space:nowrap}
+.org-danger{color:var(--warn)}
+
+/* pestañas */
+.org-tabs,.org-subtabs{
+  display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0;
+}
+.org-subtabs{position:static;padding:0}
+.org-tabs::-webkit-scrollbar,.org-subtabs::-webkit-scrollbar{display:none}
+.org-tabs .chip{position:relative}
+.org-badge{
+  display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;
+  margin-left:6px;border-radius:999px;background:var(--warn);color:#2a1500;font-size:.68rem;font-weight:800;
+}
+#orgVista{display:flex;flex-direction:column;gap:12px}
+
+/* formularios */
+.org-input{
+  background:var(--bg-soft);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:10px 11px;font-size:.88rem;color:var(--text);font-family:inherit;width:100%;min-width:0;
+}
+.org-input:focus{border-color:var(--gold);outline:none}
+textarea.org-input{resize:vertical;line-height:1.4}
+select.org-input{appearance:auto}
+.org-num{width:74px;flex:0 0 auto;text-align:center}
+.org-row{display:flex;align-items:center;gap:8px}
+.org-row > .org-input:not(.org-num){flex:1}
+.org-spread{justify-content:space-between}
+.org-wrap{flex-wrap:wrap}
+.org-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.org-grid2 label,.org-fej{display:flex;flex-direction:column;gap:4px;font-size:.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.org-fej{flex-direction:row;align-items:center;gap:8px}
+.org-check{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text-dim);white-space:nowrap}
+.org-check input{accent-color:var(--gold);width:16px;height:16px}
+.org-file{
+  display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:999px;
+  border:1px dashed var(--border-strong);color:var(--text-dim);font-size:.82rem;font-weight:700;cursor:pointer;
+}
+.org-file input{font-size:.75rem;max-width:60%}
+.org-subform{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+
+/* resumen */
+.org-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.org-stat{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.org-stat b{font-family:'Barlow Condensed',sans-serif;font-size:2.2rem;line-height:1;color:var(--text)}
+.org-stat span{font-size:.76rem;color:var(--text-dim);font-weight:600}
+.org-stat.is-alert{border-color:rgba(230,168,60,.6);background:var(--gold-dim)}
+.org-stat.is-alert b{color:var(--gold)}
+.org-table{display:flex;flex-direction:column}
+.org-cat-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.org-cat-row:first-child{border-top:none}
+.org-cat-row > div{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.org-bar{height:4px;border-radius:4px;background:var(--surface-strong);overflow:hidden;margin-top:3px}
+.org-bar i{display:block;height:100%;background:var(--gold)}
+
+/* reservas */
+.org-pill{
+  display:inline-block;padding:3px 9px;border-radius:999px;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  background:var(--surface-strong);color:var(--text-dim);margin-left:6px;
+}
+.org-res .org-pill{margin-left:0}
+.org-est-PENDIENTE_APROBACION .org-pill{background:var(--gold);color:var(--gold-ink)}
+.org-est-RESERVADO .org-pill{background:rgba(120,200,140,.18);color:#9fe0b0}
+.org-est-RECHAZADO .org-pill,.org-est-CANCELADO .org-pill{background:var(--warn-bg);color:var(--warn)}
+.org-res-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.org-res-cruce{font-weight:800;font-size:.95rem;line-height:1.3}
+.org-res-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.78rem;color:var(--text-dim)}
+.org-res-meta a{color:var(--text)}
+.org-res.is-hecha{opacity:.85}
+.org-tras{margin-top:4px}
+.org-wa{display:inline-flex;align-items:center;justify-content:center}
+
+/* agenda */
+.org-nav-sem{justify-content:space-between}
+.org-nav-sem b{font-size:.88rem}
+.org-dia{display:flex;flex-direction:column;gap:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.org-dia.is-vacio{opacity:.55}
+.org-franja{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.org-franja-head{display:flex;align-items:center;gap:10px}
+.org-franja-head b{font-family:'IBM Plex Mono',monospace;font-size:.85rem}
+.org-franja-head .org-link{margin-left:auto}
+.org-libres{font-size:.72rem;font-weight:700;color:#9fe0b0}
+.org-libres.is-lleno{color:var(--warn)}
+.org-ag-linea{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px dashed var(--border)}
+.org-ag-linea:first-of-type{border-top:none}
+.org-cancha{
+  flex-shrink:0;min-width:38px;text-align:center;padding:4px 6px;border-radius:8px;font-size:.7rem;font-weight:800;
+  background:var(--surface-strong);color:var(--text);
+}
+.org-ag-linea.org-est-PENDIENTE_APROBACION .org-cancha{background:var(--gold);color:var(--gold-ink)}
+.org-ag-linea.is-bloqueo .org-cancha{background:var(--warn-bg);color:var(--warn)}
+.org-ag-tx{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0;font-size:.82rem}
+.org-ag-tx b{font-weight:700;overflow:hidden;text-overflow:ellipsis}
+
+/* resultados */
+.org-fecha{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.org-fecha summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none}
+.org-fecha summary::-webkit-details-marker{display:none}
+.org-fecha summary .org-pill{margin-left:auto;background:var(--gold);color:var(--gold-ink)}
+.org-partido{padding:12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.org-partido-parejas{display:flex;flex-direction:column;gap:2px;font-size:.86rem;font-weight:600}
+.org-partido-parejas .is-ganador{color:var(--gold);font-weight:800}
+.org-partido-parejas .is-ganador::after{content:' ✓'}
+.org-sets{display:flex;gap:6px;align-items:center}
+.org-set{width:64px;flex:0 0 auto;text-align:center;font-family:'IBM Plex Mono',monospace}
+.org-guardar-set{flex:1;padding:10px}
+
+/* parejas */
+.org-pareja{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:.85rem}
+.org-pareja-tx{flex:1;min-width:0}
+.org-pareja.is-baja{opacity:.5}
+.org-tag{display:inline-flex;align-items:center;gap:2px;padding:4px 4px 4px 11px;border-radius:999px;background:var(--surface-strong);font-size:.78rem;font-weight:700}
+
+/* horarios */
+.org-gdia{padding:8px 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.org-gfila{display:flex;align-items:center;gap:6px;font-size:.78rem}
+.org-gfila input[type=time]{flex:1}
+
+/* contenido */
+.org-texto{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--border)}
+.org-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+.org-item-tx{flex:1;min-width:0;font-size:.85rem}
+.org-logo{width:44px;height:44px;object-fit:contain;border-radius:8px;background:#fff;flex-shrink:0}
+.org-logo-vacio{display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#555}
+.org-fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.org-foto{position:relative;border-radius:8px;overflow:hidden;background:var(--surface-strong);aspect-ratio:1}
+.org-foto img{width:100%;height:100%;object-fit:cover;display:block}
+.org-foto span{position:absolute;left:4px;bottom:4px;font-size:.62rem;background:rgba(0,0,0,.6);padding:2px 5px;border-radius:5px}
+.org-foto .org-link{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);border-radius:999px;padding:3px 7px}
+
+/* aviso flotante */
+.org-toast{
+  position:fixed;left:50%;bottom:86px;transform:translate(-50%,20px);opacity:0;z-index:100;
+  background:#1d1d22;border:1px solid var(--border-strong);color:var(--text);padding:11px 16px;border-radius:12px;
+  font-size:.84rem;font-weight:600;max-width:min(92vw,440px);box-shadow:var(--shadow-card);transition:all .25s ease;
+}
+.org-toast.show{opacity:1;transform:translate(-50%,0)}
+.org-toast.is-error{border-color:rgba(255,182,72,.5);color:var(--warn)}
+
+@media (max-width:380px){
+  .org-grid2{grid-template-columns:1fr}
+  .org-set{width:56px}
+}
+
+/* ---------- v2: etapas, pagos por jugador, resultado en la reserva, clases ---------- */
+.org-stats{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.org-etapa-porcerrar .org-pill{background:rgba(255,182,72,.18);color:var(--warn)}
+.org-etapa-completas .org-pill{background:rgba(120,200,140,.18);color:#9fe0b0}
+.org-bloque{border-top:1px solid var(--border);padding-top:10px;margin-top:4px;display:flex;flex-direction:column;gap:6px}
+.org-bloque-tit{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.org-bloque-tit b{font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim)}
+.org-pago{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)}
+.org-pago:last-of-type{border-bottom:none}
+.org-pago-nombre{flex:1;min-width:0;font-size:.86rem;font-weight:600}
+.org-pago.is-pagado .org-pago-nombre{color:#9fe0b0}
+.org-pill-sena{background:var(--gold-dim)!important;color:var(--gold-light)!important;margin-left:4px}
+.org-toggle{
+  flex-shrink:0;padding:7px 12px;border-radius:999px;font-size:.74rem;font-weight:800;
+  background:var(--surface-strong);color:var(--text);border:1px solid var(--border-strong);
+}
+.org-toggle.is-on{background:rgba(120,200,140,.18);color:#9fe0b0;border-color:rgba(120,200,140,.5)}
+.org-clases-dia{display:flex;flex-wrap:wrap;gap:6px}
+.org-tag-clase{background:rgba(255,255,255,.06);color:var(--text-dim);font-weight:600;padding:4px 10px}
+.org-libres-clases{font-size:.7rem;color:#9fe0b0;white-space:nowrap}
+.org-libres-clases.is-aviso{color:var(--warn)}
+.org-gfila{flex-wrap:wrap}
+.org-form-bloqueo{background:var(--bg-soft);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:12px;margin:6px 0}
+
+/* Reservas agrupadas por mes */
+.org-mes { margin: 10px 0; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 0 12px; background: rgba(255,255,255,.02); }
+.org-mes > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 14px 2px; font-size: 16px; }
+.org-mes > summary::-webkit-details-marker { display: none; }
+.org-mes > summary::after { content: '▾'; margin-left: 8px; opacity: .6; }
+.org-mes:not([open]) > summary::after { content: '▸'; }
+.org-mes > summary .org-muted { margin-left: auto; }
+.org-mes[open] { padding-bottom: 10px; }
+.org-eliminar { opacity: .75; font-size: 13px; }
