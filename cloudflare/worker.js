@@ -555,6 +555,7 @@ async function aPartidosDisponibles(c) {
       WHERE p.categoria = ? AND p.estado = ? AND p.fecha <= ?
         AND NOT EXISTS (SELECT 1 FROM reservas r WHERE r.id_partido = p.id AND r.rechazada_ts IS NULL AND r.cancelada_ts IS NULL)
         AND NOT EXISTS (SELECT 1 FROM retenciones t WHERE t.id_partido = p.id AND t.creada_ts > ?)
+        AND NOT EXISTS (SELECT 1 FROM parejas x WHERE x.id IN (p.pareja_a_id, p.pareja_b_id) AND x.estado = 'BAJA')
       ORDER BY p.fecha, p.id`, cat, PENDIENTE, categoria.fecha_en_juego, corte),
   ]);
   return partidos.map((p) => ({
