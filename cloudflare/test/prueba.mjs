@@ -281,6 +281,26 @@ console.log('9) Protección al re-importar');
 const reimp = await api('importar', A({ datos: datosImport }));
 check(reimp.ok === false && reimp.error.includes('no están en la planilla'), 'no pisa reservas nuevas', reimp.error);
 
+console.log('12) Sets sin guion, eliminar reserva');
+{
+  const cat = datosImport.categorias[0].nombre;
+  const pp = (await ok('adminPartidos', A({ categoria: cat }))).partidos.find((x) => x.estado !== 'JUGADO');
+  const g1 = await ok('adminGuardarResultado', A({ idPartido: pp.idPartido, set1: '63', set2: '46', set3: '108' }));
+  check(g1 && g1.estado === 'JUGADO', 'sets escritos sin guion (63 46 108)', g1);
+  const pp2 = (await ok('adminPartidos', A({ categoria: cat }))).partidos.find((x) => x.idPartido === pp.idPartido);
+  check(pp2.set1 === '6-3' && pp2.set2 === '4-6' && pp2.set3 === '10-8', 'se guardan como 6-3 4-6 10-8', [pp2.set1, pp2.set2, pp2.set3]);
+  const g2 = await ok('adminGuardarResultado', A({ idPartido: pp.idPartido, set1: '76', set2: '67', set3: '1210' }));
+  const pp3 = (await ok('adminPartidos', A({ categoria: cat }))).partidos.find((x) => x.idPartido === pp.idPartido);
+  check(pp3.set1 === '7-6' && pp3.set2 === '6-7' && pp3.set3 === '12-10', '76 67 1210', [pp3.set1, pp3.set2, pp3.set3]);
+  check((await api('adminGuardarResultado', A({ idPartido: pp.idPartido, set1: '99', set2: '64' }))).ok === false, 'set imposible (99) avisa');
+  await ok('adminGuardarResultado', A({ idPartido: pp.idPartido, set1: '', set2: '', set3: '' }));
+  const hist = await ok('adminReservas', A({ filtro: 'historial' }));
+  const victima = hist[hist.length - 1];
+  await ok('adminEliminarReserva', A({ idReserva: victima.idReserva }));
+  check(!(await ok('adminReservas', A({ filtro: 'historial' }))).some((r) => r.idReserva === victima.idReserva), 'reserva eliminada del sistema');
+  check((await api('adminEliminarReserva', { idReserva: hist[0].idReserva })).ok === false, 'eliminar exige organizador');
+}
+
 console.log('11) Publicar: reiniciar todo como está en la planilla');
 const antesG = await ok('adminGrilla', A());
 check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');

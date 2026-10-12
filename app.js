@@ -1504,7 +1504,6 @@ function reservarPintarExito_(datos) {
     '<div class="rsv-summary-row"><span>Cruce</span><b>' + esc_(datos.parejaA) + ' vs ' + esc_(datos.parejaB) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Fecha</span><b>' + esc_(formatearFechaLarga_(datos.fecha)) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Horario</span><b>' + esc_(formatearHorarioSeguro_(datos.horarioInicio)) + ' - ' + esc_(formatearHorarioSeguro_(datos.horarioFin)) + '</b></div>' +
-    (datos.cancha ? '<div class="rsv-summary-row"><span>Cancha</span><b>Cancha ' + esc_(datos.cancha) + '</b></div>' : '') +
     '<div class="rsv-summary-row"><span>Seña pagada</span><b>' + formatearMonto_(datos.montoPagado) + '</b></div>' +
     '<div class="rsv-summary-row"><span>Saldo pendiente</span><b>' + formatearMonto_(datos.saldoPendiente) + '</b></div>' +
     // El backend siempre devuelve PENDIENTE_APROBACION acá (confirmarReserva

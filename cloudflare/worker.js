@@ -78,8 +78,26 @@ function nombresDeTxtPareja(t) {
   const m = /^[A-Za-z]+\d+\s*·\s*(.+)$/.exec(s);
   return m ? m[1].trim() : s;
 }
+// Acepta "6-4", "6/4", "6 4" y también solo números (el teclado del celu no
+// tiene guion): "64" = 6-4, "76" = 7-6, "108" = 10-8, "810" = 8-10, "1210" = 12-10.
+function pareceSetValido(a, b) {
+  const g = Math.max(a, b), p = Math.min(a, b);
+  if (g === 6 && p <= 4) return true;
+  if (g === 7 && (p === 5 || p === 6)) return true;
+  return g >= 10 && g - p >= 2 && (g === 10 || g - p === 2);
+}
 function parsearSet(t) {
-  const m = /^(\d{1,2})\s*[-\/\s]\s*(\d{1,2})$/.exec(txt(t));
+  const s = txt(t).replace(/\s+/g, '');
+  if (/^\d{2,4}$/.test(s)) {
+    for (let i = 1; i < s.length; i++) {
+      const x = s.slice(0, i), y = s.slice(i);
+      if (x.length > 2 || y.length > 2) continue;
+      const a = parseInt(x, 10), b = parseInt(y, 10);
+      if (pareceSetValido(a, b)) return { a, b };
+    }
+    return null;
+  }
+  const m = /^(\d{1,2})\s*[-\/\s.:]\s*(\d{1,2})$/.exec(txt(t));
   if (!m) return null;
   const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
   if (a === b) return null;
@@ -354,7 +372,7 @@ function resolverResultado(set1, set2, set3, idA, idB) {
     const t = txt(s);
     if (!t) return '';
     const p = parsearSet(t);
-    if (!p) falla('El set ' + (i + 1) + ' ("' + t + '") no es válido. Escribilo como 6-4.');
+    if (!p) falla('El set ' + (i + 1) + ' ("' + t + '") no es válido. Escribí los games, por ejemplo 64 (= 6-4) o 108 (= 10-8).');
     return p.a + '-' + p.b;
   });
   let sA = 0, sB = 0;
@@ -922,6 +940,19 @@ async function cambiarEstadoReserva(c, campo, estadoObjetivo) {
 }
 const aAprobarReserva = (c) => cambiarEstadoReserva(c, 'aprobada_ts', EST.RESERVADO);
 const aRechazarReserva = (c) => cambiarEstadoReserva(c, 'rechazada_ts', EST.RECHAZADO);
+
+// Borra una reserva del sistema para siempre (ej: la pareja se dio de baja).
+// Si el partido tenía resultado cargado, el resultado queda; se borra aparte.
+async function aAdminEliminarReserva(c) {
+  await exigirAdmin(c);
+  const id = txt(c.datos.idReserva);
+  const r = await uno(c.db, 'SELECT * FROM reservas WHERE id = ?', id);
+  if (!r) falla('No se encontró esa reserva.');
+  const stmts = [c.db.prepare('DELETE FROM reservas WHERE id = ?').bind(id)];
+  if (r.comprobante_id) stmts.push(c.db.prepare('DELETE FROM archivos WHERE id = ?').bind(r.comprobante_id));
+  await c.db.batch(stmts);
+  return { ok: true, eliminada: id };
+}
 
 async function aAdminCancelarReserva(c) {
   await exigirAdmin(c);
@@ -1574,7 +1605,7 @@ const ACCIONES = {
   confirmarReserva: aConfirmarReserva, consultarReserva: aConsultarReserva, buscarReserva: aBuscarReserva, cancelarReserva: aCancelarReserva,
   // organizador
   adminLogin: aAdminLogin, adminResumen: aAdminResumen, adminReservas: aAdminReservas, listarPendientes: aListarPendientes,
-  aprobarReserva: aAprobarReserva, rechazarReserva: aRechazarReserva, adminCancelarReserva: aAdminCancelarReserva, adminMarcarPago: aAdminMarcarPago,
+  aprobarReserva: aAprobarReserva, rechazarReserva: aRechazarReserva, adminCancelarReserva: aAdminCancelarReserva, adminEliminarReserva: aAdminEliminarReserva, adminMarcarPago: aAdminMarcarPago,
   adminAgenda: aAdminAgenda, adminPartidos: aAdminPartidos, adminGuardarResultado: aAdminGuardarResultado,
   adminFechaEnJuego: aAdminFechaEnJuego, adminFechaEnJuegoTodas: aAdminFechaEnJuegoTodas,
   adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminCrearCategoria: aAdminCrearCategoria,

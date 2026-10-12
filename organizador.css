@@ -192,3 +192,13 @@ select.org-input{appearance:auto}
 .org-libres-clases.is-aviso{color:var(--warn)}
 .org-gfila{flex-wrap:wrap}
 .org-form-bloqueo{background:var(--bg-soft);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:12px;margin:6px 0}
+
+/* Reservas agrupadas por mes */
+.org-mes { margin: 10px 0; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 0 12px; background: rgba(255,255,255,.02); }
+.org-mes > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 14px 2px; font-size: 16px; }
+.org-mes > summary::-webkit-details-marker { display: none; }
+.org-mes > summary::after { content: '▾'; margin-left: 8px; opacity: .6; }
+.org-mes:not([open]) > summary::after { content: '▸'; }
+.org-mes > summary .org-muted { margin-left: auto; }
+.org-mes[open] { padding-bottom: 10px; }
+.org-eliminar { opacity: .75; font-size: 13px; }

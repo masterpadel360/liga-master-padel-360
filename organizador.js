@@ -297,13 +297,31 @@
       if (f === 'pendientes') actualizarBadge(lista.length);
       var cont = $('#orgListaRes');
       if (!lista.length) { cont.innerHTML = '<p class="state-empty">' + VACIO_RES[f] + '</p>'; return; }
-      cont.innerHTML = (f === 'historial' || f === 'completas' || f === 'rechazadas' ? '<p class="org-muted">' + lista.length + ' reserva(s)</p>' : '') +
-        lista.map(tarjetaReserva).join('');
+      if (f === 'pendientes' || f === 'proximas') { cont.innerHTML = lista.map(tarjetaReserva).join(''); return; }
+      cont.innerHTML = '<p class="org-muted">' + lista.length + ' reserva(s)</p>' + porMes(lista);
     }).catch(errorVista);
   }
 
+  var MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  // Agrupa las reservas por mes del partido (el más reciente primero y abierto).
+  function porMes(lista) {
+    var grupos = {}, orden = [];
+    lista.forEach(function (r) {
+      var k = String(r.fecha || '').slice(0, 7);
+      if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+      grupos[k].push(r);
+    });
+    orden.sort().reverse();
+    return orden.map(function (k, i) {
+      var p = k.split('-');
+      var titulo = p.length === 2 ? MESES[Number(p[1]) - 1] + ' ' + p[0] : 'Sin fecha';
+      return '<details class="org-mes"' + (i === 0 ? ' open' : '') + '><summary><b>' + esc(titulo) + '</b><span class="org-muted">' + grupos[k].length + '</span></summary>' +
+        grupos[k].map(tarjetaReserva).join('') + '</details>';
+    }).join('');
+  }
+
   function mensajeWa(r, tipo) {
-    var base = r.categoria + ': ' + r.parejaA + ' vs ' + r.parejaB + '\n📅 ' + fechaCorta(r.fecha) + ' · ' + r.horarioInicio + ' a ' + r.horarioFin + (r.cancha ? '\n🎾 Cancha ' + r.cancha : '');
+    var base = r.categoria + ': ' + r.parejaA + ' vs ' + r.parejaB + '\n📅 ' + fechaCorta(r.fecha) + ' · ' + r.horarioInicio + ' a ' + r.horarioFin + '';
     var nombre = (r.nombreSolicitante || '').split(' ')[0];
     if (tipo === 'aprobada') return '¡Hola ' + nombre + '! Tu reserva de la Liga Master Pádel 360 quedó CONFIRMADA ✅\n\n' + base + '\nCódigo: ' + r.codigoReserva + '\n\nSaldo a abonar en el club: ' + plata(r.saldoPendiente) + '.';
     if (tipo === 'rechazada') return 'Hola ' + nombre + ', no pudimos confirmar tu solicitud de reserva de la Liga Master Pádel 360:\n\n' + base + '\n\nEl horario quedó libre otra vez. Escribime así lo resolvemos.';
@@ -342,7 +360,7 @@
         return '<input class="org-input org-set" inputmode="numeric" data-set="' + i + '" value="' + esc(p['set' + i]) + '" placeholder="' + (i === 3 ? 'STB' : 'Set ' + i) + '" aria-label="Set ' + i + '">';
       }).join('') +
       '<button class="rsv-btn-aprobar org-guardar-set" data-org="guardar-resultado-res" type="button">Guardar</button></div>' +
-      '<p class="org-muted org-mini">Sets del lado de ' + esc(r.parejaA) + ' (ej: 6-4).</p>' +
+      '<p class="org-muted org-mini">Sets del lado de ' + esc(r.parejaA) + '. Escribí solo los números: 64 = 6-4, 76 = 7-6, 108 = 10-8.</p>' +
     '</div>';
   }
 
@@ -361,13 +379,14 @@
     return '<div class="admin-card org-res org-est-' + e + (r.etapa ? ' org-etapa-' + r.etapa : '') + '" data-res-card="' + esc(r.idReserva) + '" data-res=\'' + esc(JSON.stringify(r)) + '\'>' +
       '<div class="org-res-head"><span class="org-pill">' + esc(etiqueta) + '</span><span class="org-muted">' + esc(r.idReserva) + ' · ' + esc(r.codigoReserva) + '</span></div>' +
       '<div class="org-res-cruce">' + esc(r.parejaA) + ' <span class="org-muted">vs</span> ' + esc(r.parejaB) + '</div>' +
-      '<div class="org-res-meta"><span>' + esc(r.categoria) + '</span><span>📅 ' + esc(fechaCorta(r.fecha)) + ' ' + esc(r.horarioInicio) + '–' + esc(r.horarioFin) + '</span><span>Cancha ' + esc(r.cancha) + '</span></div>' +
+      '<div class="org-res-meta"><span>' + esc(r.categoria) + '</span><span>📅 ' + esc(fechaCorta(r.fecha)) + ' ' + esc(r.horarioInicio) + '–' + esc(r.horarioFin) + '</span></div>' +
       '<div class="org-res-meta"><span>👤 ' + esc(r.nombreSolicitante) + '</span><a href="tel:' + esc(r.telefonoSolicitante) + '">📞 ' + esc(r.telefonoSolicitante) + '</a>' +
         (conDetalle ? '' : '<span>Seña ' + plata(r.montoPagado) + '</span>') + '</div>' +
       (r.comprobanteUrl ? '<a class="admin-comprobante-link" href="' + esc(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante</a>' : '<span class="hint-line">Sin comprobante</span>') +
       (conDetalle ? seccionPagos(r) + seccionResultado(r) : '') +
       (acciones ? '<div class="admin-card-actions">' + acciones + '</div>' : '') +
       (e === 'RESERVADO' || (e === 'FINALIZADO' && !(r.partido && r.partido.estado === 'JUGADO')) ? '<button class="org-link org-danger" data-org="cancelar-res" data-id="' + esc(r.idReserva) + '" data-jugada="' + (e === 'FINALIZADO' ? '1' : '') + '" type="button">' + (e === 'FINALIZADO' ? 'Cancelar reserva (no se jugó)' : 'Cancelar turno') + '</button>' : '') +
+      '<button class="org-link org-danger org-eliminar" data-org="eliminar-res" data-id="' + esc(r.idReserva) + '" type="button">Eliminar del sistema</button>' +
       '<div class="org-tras" hidden></div>' +
     '</div>';
   }
@@ -484,7 +503,7 @@
       if (!st.catResultados || cats.indexOf(st.catResultados) === -1) st.catResultados = cats[0];
       var cab = '<div class="org-subtabs">' + cats.map(function (c) {
         return '<button class="chip' + (c === st.catResultados ? ' active' : '') + '" data-org-catres="' + esc(c) + '" type="button">' + esc(c) + '</button>';
-      }).join('') + '</div><div id="orgPartidos"><div class="state-loading">Cargando…</div></div>';
+      }).join('') + '</div><p class="org-muted">Sets del lado de la primera pareja. Escribí solo los números: 64 = 6-4, 76 = 7-6, 108 = 10-8.</p><div id="orgPartidos"><div class="state-loading">Cargando…</div></div>';
       vista().innerHTML = cab;
       return api('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
     }).catch(errorVista);
@@ -529,7 +548,7 @@
         }).join('') +
         '<button class="rsv-btn-aprobar org-guardar-set" data-org="guardar-resultado" type="button">Guardar</button>' +
       '</div>' +
-      (p.reserva ? '<div class="org-muted org-mini">Reserva: ' + esc(fechaCorta(p.reserva.fecha)) + ' ' + esc(p.reserva.horarioInicio) + ' · Cancha ' + esc(p.reserva.cancha) + ' · ' + esc(EST_TX[p.reserva.estado]) + '</div>' : '') +
+      (p.reserva ? '<div class="org-muted org-mini">Reserva: ' + esc(fechaCorta(p.reserva.fecha)) + ' ' + esc(p.reserva.horarioInicio) + ' · ' + esc(EST_TX[p.reserva.estado]) + '</div>' : '') +
     '</div>';
   }
 
@@ -809,6 +828,10 @@
         : '¿Cancelar este turno confirmado? El horario y el cruce vuelven a quedar libres.';
       if (!confirm(msj)) return;
       conBoton(el, api('adminCancelarReserva', { idReserva: el.getAttribute('data-id') }), 'Turno cancelado').then(vReservas).catch(function () {});
+    },
+    'eliminar-res': function (el) {
+      if (!confirm('¿Eliminar esta reserva del sistema para siempre? No se puede deshacer. (Si solo no se jugó, usá "Cancelar").')) return;
+      conBoton(el, api('adminEliminarReserva', { idReserva: el.getAttribute('data-id') }), 'Reserva eliminada').then(vReservas).catch(function () {});
     },
     'sem-prev': function () { st.agendaDesde = sumarDias(st.agendaDesde, -7); vAgenda(); },
     'sem-next': function () { st.agendaDesde = sumarDias(st.agendaDesde, 7); vAgenda(); },

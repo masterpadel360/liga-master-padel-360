@@ -62,3 +62,8 @@ la planilla como antes.
 - App + API en http://localhost:8787: `node --no-warnings cloudflare/test/servidor-local.mjs`
   (contraseña liga `padel360`, organizador `clave-orga`)
 - Recorrido automático en navegador: `python3 cloudflare/test/navegador.py capturas/`
+
+## Antes de publicar (notas de Gabriel)
+
+- Al reimportar la planilla: dejar afuera la reserva R0045 (pidió borrarla del sistema el 12/10).
+- Importar con `forzar: true` y `reiniciarTodo: true` para borrar todo lo cargado en las pruebas.
