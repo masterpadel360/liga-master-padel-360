@@ -21,6 +21,7 @@
 .org-btn-full{width:100%;border:none;cursor:pointer;text-align:center;display:block}
 
 .org-top{display:flex;align-items:center;justify-content:space-between}
+.org-top-acc{display:flex;align-items:center;gap:10px}
 .org-link{color:var(--gold);font-size:.78rem;font-weight:800;padding:6px 4px;background:none;white-space:nowrap}
 .org-danger{color:var(--warn)}
 

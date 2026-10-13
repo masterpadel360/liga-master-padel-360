@@ -201,7 +201,10 @@
     root.innerHTML =
       '<div class="org-top">' +
         '<a class="back-row" href="./">‹ Ir a la app</a>' +
-        '<button class="org-link" data-org="salir" type="button">Salir</button>' +
+        '<span class="org-top-acc">' +
+          '<button class="org-link" data-org="actualizar" type="button">↻ Actualizar</button>' +
+          '<button class="org-link" data-org="salir" type="button">Salir</button>' +
+        '</span>' +
       '</div>' +
       '<nav class="org-tabs" id="orgTabs">' + TABS.map(function (t) {
         return '<button class="chip" data-org-tab="' + t.id + '" type="button">' + t.tx + '<span class="org-badge" data-badge="' + t.id + '" hidden></span></button>';
@@ -808,6 +811,10 @@
   }
 
   var HANDLERS = {
+    actualizar: function (el) {
+      el.textContent = 'Actualizando…';
+      if (window.mp360ActualizarApp) window.mp360ActualizarApp({ admin: '1' }); else location.reload();
+    },
     salir: function () { if (confirm('¿Cerrar la sesión de organizador en este dispositivo?')) { borrarToken(); pintarLogin(); } },
     recargar: function () { irTab(st.tab); },
     'ir-pendientes': function () { st.filtroReservas = 'pendientes'; irTab('reservas'); },
