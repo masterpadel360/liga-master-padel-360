@@ -203,3 +203,10 @@ select.org-input{appearance:auto}
 .org-mes > summary .org-muted { margin-left: auto; }
 .org-mes[open] { padding-bottom: 10px; }
 .org-eliminar { opacity: .75; font-size: 13px; }
+
+/* buscador de reservas */
+.org-buscador{position:sticky;top:0;z-index:5;display:flex;align-items:center;background:var(--bg);padding:2px 0 6px}
+.org-buscador .org-input{padding-left:36px;padding-right:38px;font-size:16px}
+.org-buscador .org-input::-webkit-search-cancel-button{display:none}
+.org-buscador-ico{position:absolute;left:11px;font-size:.9rem;opacity:.6;pointer-events:none}
+.org-buscador-x{position:absolute;right:6px;border:0;background:transparent;color:var(--text-dim);font-size:1rem;width:30px;height:30px;cursor:pointer}

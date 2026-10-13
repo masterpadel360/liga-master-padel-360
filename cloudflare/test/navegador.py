@@ -164,6 +164,27 @@ with sync_playwright() as p:
         page.wait_for_selector('#orgListaRes .org-res, #orgListaRes .state-empty')
     ok('pestañas Por cerrar / Completas / Rechazadas / Historial')
 
+    # buscador de reservas: en vivo, sin tildes ni mayúsculas, en todas las pestañas
+    page.click('[data-org-filtro="pendientes"]')
+    page.wait_for_selector('#orgBuscar')
+    page.locator('#orgBuscar').press_sequentially('jugadora prúeba', delay=30)
+    page.wait_for_selector('#orgListaRes .org-res:has-text("Jugadora Prueba")')
+    assert page.locator('.org-subtabs').is_hidden()
+    assert page.evaluate("document.activeElement.id") == 'orgBuscar'
+    ok('buscador encuentra "Jugadora Prueba" escribiendo "jugadora prúeba" desde Para aprobar')
+    foto(page, '10c-org-buscador')
+    page.fill('#orgBuscar', '4445566')
+    page.dispatch_event('#orgBuscar', 'input')
+    page.wait_for_selector('#orgListaRes .org-res:has-text("Jugadora Prueba")')
+    ok('buscador encuentra por teléfono')
+    page.fill('#orgBuscar', 'zzzz nadie')
+    page.dispatch_event('#orgBuscar', 'input')
+    page.wait_for_selector('#orgListaRes .state-empty')
+    page.click('[data-org="limpiar-busqueda"]')
+    page.wait_for_selector('.org-subtabs:not([hidden])')
+    assert page.input_value('#orgBuscar') == ''
+    ok('sin resultados muestra aviso y la ✕ vuelve a las pestañas')
+
     page.click('[data-org-tab="agenda"]')
     page.wait_for_selector('.org-dia')
     ok('agenda con %d turnos ocupados esta semana' % page.locator('.org-ag-linea:not(.is-bloqueo)').count())

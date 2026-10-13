@@ -39,7 +39,7 @@ http.createServer(async (req, res) => {
   if (archivo.endsWith(path.sep)) archivo = path.join(archivo, 'index.html');
   if (!existsSync(archivo)) { res.writeHead(404); res.end('no'); return; }
   let datos = readFileSync(archivo);
-  if (archivo.endsWith('app.js')) datos = Buffer.from(datos.toString('utf8').replace("var BACKEND_URL = '';", "var BACKEND_URL = 'http://localhost:" + PUERTO + "/api/';"));
+  if (archivo.endsWith('app.js')) datos = Buffer.from(datos.toString('utf8').replace(/var BACKEND_URL = '[^']*';/,"var BACKEND_URL = 'http://localhost:" + PUERTO + "/api/';"));
   res.writeHead(200, { 'Content-Type': tipos[path.extname(archivo)] || 'application/octet-stream' });
   res.end(datos);
 }).listen(PUERTO, () => console.log('App local en http://localhost:' + PUERTO));

@@ -211,6 +211,7 @@
       }).join('') + '</nav>' +
       '<div id="orgVista"></div>';
     root.onclick = manejarClick;
+    root.oninput = alEscribirBusqueda;
     root.onchange = manejarCambio;
     irTab(st.tab);
   }
@@ -287,22 +288,91 @@
   function vReservas() {
     var f = st.filtroReservas;
     var cab =
-      '<div class="org-subtabs">' + FILTROS_RES.map(function (x) {
+      '<div class="org-subtabs"' + (st.busqueda ? ' hidden' : '') + '>' + FILTROS_RES.map(function (x) {
         return '<button class="chip' + (f === x[0] ? ' active' : '') + '" data-org-filtro="' + x[0] + '" type="button">' + x[1] + '</button>';
       }).join('') + '</div>' +
-      (AYUDA_RES[f] ? '<p class="org-muted">' + AYUDA_RES[f] + '</p>' : '') +
-      (f === 'historial' ? '<div class="org-row"><input class="org-input" id="orgBuscar" placeholder="Buscar nombre, pareja, teléfono o código" value="' + esc(st.busqueda) + '"><button class="rsv-copy-btn" data-org="buscar" type="button">Buscar</button></div>' : '') +
+      (AYUDA_RES[f] && !st.busqueda ? '<p class="org-muted org-ayuda-res">' + AYUDA_RES[f] + '</p>' : '') +
       '<div id="orgListaRes"><div class="state-loading">Cargando…</div></div>';
-    vista().innerHTML = cab;
+    vista().innerHTML = barraBusqueda() + cab;
     var activa = root.querySelector('[data-org-filtro="' + f + '"]');
     if (activa && activa.scrollIntoView) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
-    api('adminReservas', { filtro: f, q: st.busqueda }).then(function (lista) {
+    if (st.busqueda) { pintarBusqueda(); return; }
+    api('adminReservas', { filtro: f }).then(function (lista) {
       if (f === 'pendientes') actualizarBadge(lista.length);
       var cont = $('#orgListaRes');
       if (!lista.length) { cont.innerHTML = '<p class="state-empty">' + VACIO_RES[f] + '</p>'; return; }
       if (f === 'pendientes' || f === 'proximas') { cont.innerHTML = lista.map(tarjetaReserva).join(''); return; }
       cont.innerHTML = '<p class="org-muted">' + lista.length + ' reserva(s)</p>' + porMes(lista);
     }).catch(errorVista);
+  }
+
+  // ------------------------------------------------------------ BUSCADOR
+  // Buscador fijo arriba de Reservas: filtra mientras escribís, en TODAS las
+  // reservas (confirmadas, por cerrar, jugadas…), sin importar tildes ni mayúsculas.
+  var cacheBusqueda = null; // { ts, lista }
+  function normalizar(t) {
+    return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+  function barraBusqueda() {
+    return '<div class="org-buscador">' +
+      '<span class="org-buscador-ico" aria-hidden="true">🔍</span>' +
+      '<input class="org-input" id="orgBuscar" type="search" autocomplete="off" enterkeyhint="search" placeholder="Buscar jugador, pareja, teléfono o código" value="' + esc(st.busqueda) + '">' +
+      '<button class="org-buscador-x" data-org="limpiar-busqueda" type="button" aria-label="Borrar búsqueda"' + (st.busqueda ? '' : ' hidden') + '>✕</button>' +
+    '</div>';
+  }
+  function todasLasReservas() {
+    if (cacheBusqueda && Date.now() - cacheBusqueda.ts < 60000) return Promise.resolve(cacheBusqueda.lista);
+    return api('adminReservas', { filtro: 'historial' }).then(function (lista) {
+      cacheBusqueda = { ts: Date.now(), lista: lista };
+      return lista;
+    });
+  }
+  function coincide(r, palabras, digitos) {
+    var texto = normalizar([r.nombreSolicitante, r.parejaA, r.parejaB, (r.jugadores || []).join(' '), r.categoria, r.codigoReserva, r.idReserva].join(' '));
+    var porTexto = palabras.every(function (w) { return texto.indexOf(w) !== -1; });
+    var porTel = digitos.length >= 4 && String(r.telefonoSolicitante || '').replace(/\D/g, '').indexOf(digitos) !== -1;
+    return porTexto || porTel;
+  }
+  // Primero lo que está en juego (confirmadas y por cerrar), después el resto.
+  var PRIORIDAD_EST = { RESERVADO: 0, FINALIZADO: 0, PENDIENTE_APROBACION: 1, RECHAZADO: 2, CANCELADO: 2 };
+  function pintarBusqueda() {
+    var cont = $('#orgListaRes');
+    if (!cont) return;
+    var q = st.busqueda;
+    var palabras = normalizar(q).split(/\s+/).filter(Boolean);
+    var digitos = q.replace(/\D/g, '');
+    if (!cacheBusqueda) cont.innerHTML = '<div class="state-loading">Buscando…</div>';
+    todasLasReservas().then(function (lista) {
+      if (st.busqueda !== q || !$('#orgListaRes')) return; // ya escribió otra cosa
+      var res = lista.filter(function (r) { return coincide(r, palabras, digitos); });
+      res.sort(function (a, b) {
+        var pa = PRIORIDAD_EST[a.estadoReserva], pb = PRIORIDAD_EST[b.estadoReserva];
+        if (pa !== pb) return (pa === undefined ? 3 : pa) - (pb === undefined ? 3 : pb);
+        return String(b.fecha).localeCompare(String(a.fecha));
+      });
+      cont.innerHTML = res.length
+        ? '<p class="org-muted">' + res.length + ' resultado' + (res.length === 1 ? '' : 's') + ' para "' + esc(q) + '"</p>' + res.map(tarjetaReserva).join('')
+        : '<p class="state-empty">No encontré reservas con "' + esc(q) + '".</p>';
+    }).catch(function (e) { cont.innerHTML = '<p class="state-empty">' + esc(e.message) + '</p>'; });
+  }
+  var timerBusqueda = null;
+  function alEscribirBusqueda(e) {
+    if (!e.target || e.target.id !== 'orgBuscar') return;
+    var antes = st.busqueda;
+    st.busqueda = e.target.value.trim();
+    var x = root.querySelector('.org-buscador-x'); if (x) x.hidden = !st.busqueda;
+    if (!!antes !== !!st.busqueda) { // entra o sale del modo búsqueda: repinto sin perder el foco
+      var sub = root.querySelector('.org-subtabs'); if (sub) sub.hidden = !!st.busqueda;
+      var ay = root.querySelector('.org-ayuda-res'); if (ay) ay.hidden = !!st.busqueda;
+      if (!st.busqueda) { clearTimeout(timerBusqueda); recargarListaFiltro(); return; }
+    }
+    clearTimeout(timerBusqueda);
+    timerBusqueda = setTimeout(pintarBusqueda, 150);
+  }
+  function recargarListaFiltro() {
+    vReservas();
+    var nuevo = $('#orgBuscar');
+    if (nuevo) nuevo.focus();
   }
 
   var MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -798,7 +868,7 @@
     var tab = e.target.closest('[data-org-tab]');
     if (tab) { irTab(tab.getAttribute('data-org-tab')); return; }
     var f = e.target.closest('[data-org-filtro]');
-    if (f) { st.filtroReservas = f.getAttribute('data-org-filtro'); vReservas(); return; }
+    if (f) { st.filtroReservas = f.getAttribute('data-org-filtro'); st.busqueda = ''; vReservas(); return; }
     var cr = e.target.closest('[data-org-catres]');
     if (cr) { st.catResultados = cr.getAttribute('data-org-catres'); vResultados(); return; }
     var cp = e.target.closest('[data-org-catpar]');
@@ -806,6 +876,7 @@
     var el = e.target.closest('[data-org]');
     if (!el) return;
     var a = el.getAttribute('data-org');
+    cacheBusqueda = null; // cualquier cambio (pago, resultado, cancelar…) refresca la búsqueda
     var H = HANDLERS[a];
     if (H) H(el, e);
   }
@@ -825,7 +896,7 @@
       if (!v) { toast('Escribí el número de fecha.', 'error'); return; }
       conBoton(el, api('adminFechaEnJuegoTodas', { fecha: Number(v) }), 'Fecha ' + v + ' en juego para todas las categorías').then(function () { st.resumen = null; vInicio(); }).catch(function () {});
     },
-    buscar: function () { st.busqueda = $('#orgBuscar').value.trim(); vReservas(); },
+    'limpiar-busqueda': function () { st.busqueda = ''; vReservas(); },
     aprobar: function (el) { accionReserva(el, 'aprobar'); },
     rechazar: function (el) { accionReserva(el, 'rechazar'); },
 
