@@ -323,7 +323,7 @@
   function mensajeWa(r, tipo) {
     var base = r.categoria + ': ' + r.parejaA + ' vs ' + r.parejaB + '\n📅 ' + fechaCorta(r.fecha) + ' · ' + r.horarioInicio + ' a ' + r.horarioFin + '';
     var nombre = (r.nombreSolicitante || '').split(' ')[0];
-    if (tipo === 'aprobada') return '¡Hola ' + nombre + '! Tu reserva de la Liga Master Pádel 360 quedó CONFIRMADA ✅\n\n' + base + '\nCódigo: ' + r.codigoReserva + '\n\nSaldo a abonar en el club: ' + plata(r.saldoPendiente) + '.';
+    if (tipo === 'aprobada') return '¡Hola ' + nombre + '! Tu reserva de la Liga Master Pádel 360 quedó CONFIRMADA ✅\n\n' + base + '\nCódigo: ' + r.codigoReserva + '\n\nSaldo a abonar al terminar el partido: ' + plata(r.saldoPendiente) + '.\nRecuerden transferirlo al mismo alias de la reserva (' + ((st.resumen && st.resumen.config && st.resumen.config.alias) || 'masterpadel.360') + ') y mandar los comprobantes junto con el resultado del partido. 🎾';
     if (tipo === 'rechazada') return 'Hola ' + nombre + ', no pudimos confirmar tu solicitud de reserva de la Liga Master Pádel 360:\n\n' + base + '\n\nEl horario quedó libre otra vez. Escribime así lo resolvemos.';
     return 'Hola ' + nombre + '! Te recuerdo tu partido de la Liga Master Pádel 360 🎾\n\n' + base + (r.estadoPago !== 'PAGO_COMPLETO' ? '\nSaldo pendiente: ' + plata(r.saldoPendiente) : '');
   }
