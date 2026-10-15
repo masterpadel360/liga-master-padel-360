@@ -216,6 +216,13 @@
     irTab(st.tab);
   }
 
+  // Cada vez que cambiás de pantalla sube el número: lo que llegue tarde de la anterior se descarta.
+  var genVista = 0;
+  function apiVista(accion, datos) {
+    var g = genVista;
+    return api(accion, datos).then(function (r) { if (g !== genVista) return new Promise(function () {}); return r; },
+      function (e) { if (g !== genVista) return new Promise(function () {}); throw e; });
+  }
   function irTab(tab) {
     st.tab = tab;
     root.querySelectorAll('[data-org-tab]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-org-tab') === tab); });
@@ -226,7 +233,7 @@
     ({ inicio: vInicio, reservas: vReservas, agenda: vAgenda, resultados: vResultados, parejas: vParejas, horarios: vHorarios, contenido: vContenido })[tab]();
   }
   function vista() { return $('#orgVista'); }
-  function errorVista(e) { vista().innerHTML = '<p class="state-empty">' + esc(e.message) + '</p><button class="rsv-copy-btn" data-org="recargar" type="button">Reintentar</button>'; }
+  function errorVista(e) { if (!vista()) return; vista().innerHTML = '<p class="state-empty">' + esc(e.message) + '</p><button class="rsv-copy-btn" data-org="recargar" type="button">Reintentar</button>'; }
   function actualizarBadge(n) {
     var b = root && root.querySelector('[data-badge="reservas"]');
     if (!b) return;
@@ -236,7 +243,8 @@
 
   // ============================================================ INICIO
   function vInicio() {
-    api('adminResumen').then(function (d) {
+    genVista++;
+    apiVista('adminResumen').then(function (d) {
       st.resumen = d;
       actualizarBadge(d.pendientes);
       var fechas = d.categorias.map(function (c) { return c.fechaEnJuego; }).filter(function (x) { return x; });
@@ -286,6 +294,7 @@
     rechazadas: 'Reservas rechazadas y turnos cancelados (por ejemplo, partidos suspendidos por lluvia). Esos cruces y horarios ya quedaron libres para reservar de nuevo.',
   };
   function vReservas() {
+    genVista++;
     var f = st.filtroReservas;
     var cab =
       '<div class="org-subtabs"' + (st.busqueda ? ' hidden' : '') + '>' + FILTROS_RES.map(function (x) {
@@ -297,9 +306,9 @@
     var activa = root.querySelector('[data-org-filtro="' + f + '"]');
     if (activa && activa.scrollIntoView) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
     if (st.busqueda) { pintarBusqueda(); return; }
-    api('adminReservas', { filtro: f }).then(function (lista) {
+    apiVista('adminReservas', { filtro: f }).then(function (lista) {
       if (f === 'pendientes') actualizarBadge(lista.length);
-      var cont = $('#orgListaRes');
+      var cont = $('#orgListaRes'); if (!cont) return;
       if (!lista.length) { cont.innerHTML = '<p class="state-empty">' + VACIO_RES[f] + '</p>'; return; }
       if (f === 'pendientes' || f === 'proximas') { cont.innerHTML = lista.map(tarjetaReserva).join(''); return; }
       cont.innerHTML = '<p class="org-muted">' + lista.length + ' reserva(s)</p>' + porMes(lista);
@@ -495,8 +504,9 @@
 
   // ============================================================ AGENDA
   function vAgenda() {
+    genVista++;
     if (!st.agendaDesde) st.agendaDesde = hoyISO();
-    api('adminAgenda', { desde: st.agendaDesde, dias: 7 }).then(function (d) {
+    apiVista('adminAgenda', { desde: st.agendaDesde, dias: 7 }).then(function (d) {
       st.cantidadCanchas = d.cantidadCanchas;
       var html =
         '<div class="org-row org-nav-sem">' +
@@ -572,14 +582,16 @@
 
   // ============================================================ RESULTADOS
   function vResultados() {
+    var g = ++genVista;
     obtenerCategorias().then(function (cats) {
+      if (g !== genVista) return;
       if (!st.catResultados || cats.indexOf(st.catResultados) === -1) st.catResultados = cats[0];
       var cab = '<div class="org-subtabs">' + cats.map(function (c) {
         return '<button class="chip' + (c === st.catResultados ? ' active' : '') + '" data-org-catres="' + esc(c) + '" type="button">' + esc(c) + '</button>';
       }).join('') + '</div><p class="org-muted">Sets del lado de la primera pareja. Escribí solo los números: 64 = 6-4, 76 = 7-6, 108 = 10-8.</p><div id="orgPartidos"><div class="state-loading">Cargando…</div></div>';
       vista().innerHTML = cab;
-      return api('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
-    }).catch(errorVista);
+      return apiVista('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
+    }).catch(function (e) { if (g === genVista) errorVista(e); });
   }
   function obtenerCategorias() {
     if (st.resumen) return Promise.resolve(st.resumen.categorias.map(function (c) { return c.nombre; }));
@@ -606,7 +618,7 @@
         lista.map(filaPartido).join('') +
       '</details>';
     }).join('');
-    $('#orgPartidos').innerHTML = html;
+    var cp = $('#orgPartidos'); if (cp) cp.innerHTML = html;
   }
   function filaPartido(p) {
     var gana = function (id) { return p.estado === 'JUGADO' && p.ganadorId === id ? ' is-ganador' : ''; };
@@ -627,7 +639,8 @@
 
   // ============================================================ PAREJAS
   function vParejas() {
-    api('adminParejas').then(function (d) {
+    genVista++;
+    apiVista('adminParejas').then(function (d) {
       var cats = d.categorias;
       if (!st.catParejas || cats.indexOf(st.catParejas) === -1) st.catParejas = cats[0];
       var lista = d.parejas.filter(function (p) { return p.categoria === st.catParejas; });
@@ -693,7 +706,8 @@
     return Math.max(0, (st.cantidadCanchas || 3) - clasesSimultaneas(clasesDia, ini, fin));
   }
   function vHorarios() {
-    Promise.all([api('adminBloqueos'), api('adminGrilla'), api('adminResumen')]).then(function (r) {
+    genVista++;
+    Promise.all([apiVista('adminBloqueos'), apiVista('adminGrilla'), apiVista('adminResumen')]).then(function (r) {
       var bloqueos = r[0], grilla = r[1], cfg = r[2].config;
       st.resumen = r[2];
       st.clases = grilla.clases;
@@ -806,7 +820,8 @@
 
   // ============================================================ CONTENIDO
   function vContenido() {
-    api('adminContenido').then(function (d) {
+    genVista++;
+    apiVista('adminContenido').then(function (d) {
       var novedades = d.contenido.filter(function (x) { return x.tipo === 'NOVEDAD'; });
       var premios = d.contenido.filter(function (x) { return x.tipo.indexOf('PREMIO') === 0; });
       vista().innerHTML =
