@@ -79,12 +79,13 @@ function nombresDeTxtPareja(t) {
   return m ? m[1].trim() : s;
 }
 // Acepta "6-4", "6/4", "6 4" y también solo números (el teclado del celu no
-// tiene guion): "64" = 6-4, "76" = 7-6, "108" = 10-8, "810" = 8-10, "1210" = 12-10.
+// tiene guion): "64" = 6-4, "76" = 7-6, "108" = 10-8, "112" = 11-2, "1210" = 12-10.
+// El súper tie-break puede ser a 10 o a 11, siempre con 2 de diferencia.
 function pareceSetValido(a, b) {
   const g = Math.max(a, b), p = Math.min(a, b);
   if (g === 6 && p <= 4) return true;
   if (g === 7 && (p === 5 || p === 6)) return true;
-  return g >= 10 && g - p >= 2 && (g === 10 || g - p === 2);
+  return g >= 10 && g - p >= 2 && (g <= 11 || g - p === 2);
 }
 function parsearSet(t) {
   const s = txt(t).replace(/\s+/g, '');
@@ -372,7 +373,7 @@ function resolverResultado(set1, set2, set3, idA, idB) {
     const t = txt(s);
     if (!t) return '';
     const p = parsearSet(t);
-    if (!p) falla('El set ' + (i + 1) + ' ("' + t + '") no es válido. Escribí los games, por ejemplo 64 (= 6-4) o 108 (= 10-8).');
+    if (!p) falla('El set ' + (i + 1) + ' ("' + t + '") no es válido. Escribí los games, por ejemplo 64 (= 6-4), 108 (= 10-8) o 112 (= 11-2).');
     return p.a + '-' + p.b;
   });
   let sA = 0, sB = 0;

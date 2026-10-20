@@ -442,7 +442,7 @@
         return '<input class="org-input org-set" inputmode="numeric" data-set="' + i + '" value="' + esc(p['set' + i]) + '" placeholder="' + (i === 3 ? 'STB' : 'Set ' + i) + '" aria-label="Set ' + i + '">';
       }).join('') +
       '<button class="rsv-btn-aprobar org-guardar-set" data-org="guardar-resultado-res" type="button">Guardar</button></div>' +
-      '<p class="org-muted org-mini">Sets del lado de ' + esc(r.parejaA) + '. Escribí solo los números: 64 = 6-4, 76 = 7-6, 108 = 10-8.</p>' +
+      '<p class="org-muted org-mini">Sets del lado de ' + esc(r.parejaA) + '. Escribí solo los números: 64 = 6-4, 76 = 7-6, 112 = 11-2.</p>' +
     '</div>';
   }
 
@@ -588,7 +588,7 @@
       if (!st.catResultados || cats.indexOf(st.catResultados) === -1) st.catResultados = cats[0];
       var cab = '<div class="org-subtabs">' + cats.map(function (c) {
         return '<button class="chip' + (c === st.catResultados ? ' active' : '') + '" data-org-catres="' + esc(c) + '" type="button">' + esc(c) + '</button>';
-      }).join('') + '</div><p class="org-muted">Sets del lado de la primera pareja. Escribí solo los números: 64 = 6-4, 76 = 7-6, 108 = 10-8.</p><div id="orgPartidos"><div class="state-loading">Cargando…</div></div>';
+      }).join('') + '</div><p class="org-muted">Sets del lado de la primera pareja. Escribí solo los números: 64 = 6-4, 76 = 7-6, 112 = 11-2.</p><div id="orgPartidos"><div class="state-loading">Cargando…</div></div>';
       vista().innerHTML = cab;
       return apiVista('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
     }).catch(function (e) { if (g === genVista) errorVista(e); });
