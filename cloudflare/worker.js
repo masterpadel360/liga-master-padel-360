@@ -1123,6 +1123,12 @@ async function aAdminGuardarPareja(c) {
   if (id) {
     const res = await ejecutar(c.db, 'UPDATE parejas SET categoria = ?, jugador1 = ?, jugador2 = ?, estado = ? WHERE id = ?', categoria, j1, j2, estado, id);
     if (res.meta.changes !== 1) falla('No se encontró esa pareja.');
+    // Si se corrigió un nombre, también se corrige en las reservas ya hechas de sus partidos.
+    const nombre = nombrePareja({ jugador1: j1, jugador2: j2 });
+    await c.db.batch([
+      c.db.prepare('UPDATE reservas SET pareja_a = ? WHERE id_partido IN (SELECT id FROM partidos WHERE pareja_a_id = ?)').bind(nombre, id),
+      c.db.prepare('UPDATE reservas SET pareja_b = ? WHERE id_partido IN (SELECT id FROM partidos WHERE pareja_b_id = ?)').bind(nombre, id),
+    ]);
     return { id };
   }
   const fila = await uno(c.db, `INSERT INTO parejas (id, categoria, jugador1, jugador2, estado)
