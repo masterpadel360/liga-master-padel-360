@@ -210,3 +210,9 @@ select.org-input{appearance:auto}
 .org-buscador .org-input::-webkit-search-cancel-button{display:none}
 .org-buscador-ico{position:absolute;left:11px;font-size:.9rem;opacity:.6;pointer-events:none}
 .org-buscador-x{position:absolute;right:6px;border:0;background:transparent;color:var(--text-dim);font-size:1rem;width:30px;height:30px;cursor:pointer}
+
+/* Número de fecha del fixture en cada reserva (en rojo si es un partido atrasado) */
+.org-fecha-fix{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:800;background:rgba(120,200,140,.18);color:#9fe0b0;letter-spacing:.02em}
+.org-fecha-fix:empty{display:none}
+.org-fecha-fix.is-atrasada{background:var(--warn-bg);color:var(--warn)}
+.org-ag-tx .org-fecha-fix{align-self:flex-start;margin:1px 0}

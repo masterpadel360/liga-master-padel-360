@@ -310,8 +310,8 @@
       if (f === 'pendientes') actualizarBadge(lista.length);
       var cont = $('#orgListaRes'); if (!cont) return;
       if (!lista.length) { cont.innerHTML = '<p class="state-empty">' + VACIO_RES[f] + '</p>'; return; }
-      if (f === 'pendientes' || f === 'proximas') { cont.innerHTML = lista.map(tarjetaReserva).join(''); return; }
-      cont.innerHTML = '<p class="org-muted">' + lista.length + ' reserva(s)</p>' + porMes(lista);
+      if (f === 'pendientes' || f === 'proximas') { cont.innerHTML = lista.map(tarjetaReserva).join(''); completarFechas(); return; }
+      cont.innerHTML = '<p class="org-muted">' + lista.length + ' reserva(s)</p>' + porMes(lista); completarFechas();
     }).catch(errorVista);
   }
 
@@ -362,6 +362,7 @@
       cont.innerHTML = res.length
         ? '<p class="org-muted">' + res.length + ' resultado' + (res.length === 1 ? '' : 's') + ' para "' + esc(q) + '"</p>' + res.map(tarjetaReserva).join('')
         : '<p class="state-empty">No encontré reservas con "' + esc(q) + '".</p>';
+      completarFechas();
     }).catch(function (e) { cont.innerHTML = '<p class="state-empty">' + esc(e.message) + '</p>'; });
   }
   var timerBusqueda = null;
@@ -446,6 +447,42 @@
     '</div>';
   }
 
+  // ---- Número de fecha del fixture de cada partido (para que se vea en reservas y agenda) ----
+  // Se arma con los partidos de todas las categorías y se guarda unos minutos.
+  var fixCarga = null;
+  function cargarFechasFixture() {
+    if (st.fixFechas && Date.now() - st.fixFechasTs < 5 * 60 * 1000) return Promise.resolve(st.fixFechas);
+    if (fixCarga) return fixCarga;
+    fixCarga = obtenerCategorias().then(function (cats) {
+      return Promise.all(cats.map(function (c) { return api('adminPartidos', { categoria: c }).catch(function () { return null; }); }));
+    }).then(function (rs) {
+      var m = {};
+      rs.forEach(function (d) { if (d && d.partidos) d.partidos.forEach(function (p) { m[p.idPartido] = { n: p.fecha, enJuego: d.fechaEnJuego }; }); });
+      st.fixFechas = m; st.fixFechasTs = Date.now(); fixCarga = null; return m;
+    }, function (e) { fixCarga = null; throw e; });
+    return fixCarga;
+  }
+  function txtFecha(id) {
+    var x = st.fixFechas && st.fixFechas[id]; if (!x || x.n == null) return '';
+    var atr = x.enJuego != null && Number(x.n) < Number(x.enJuego);
+    return 'Fecha ' + x.n + (atr ? ' · atrasado' : '');
+  }
+  function tagFecha(r) {
+    if (!r || !r.idPartido) return '';
+    var t = txtFecha(r.idPartido);
+    return '<span class="org-fecha-fix' + (/atrasado/.test(t) ? ' is-atrasada' : '') + '" data-fix="' + esc(r.idPartido) + '">' + esc(t) + '</span>';
+  }
+  // Completa las etiquetas que quedaron vacías (si todavía no se habían cargado las fechas).
+  function completarFechas() {
+    if (!root || !root.querySelector('[data-fix]')) return;
+    cargarFechasFixture().then(function () {
+      root.querySelectorAll('[data-fix]').forEach(function (el) {
+        var t = txtFecha(el.getAttribute('data-fix'));
+        el.textContent = t; el.classList.toggle('is-atrasada', /atrasado/.test(t));
+      });
+    }).catch(function () {});
+  }
+
   function tarjetaReserva(r) {
     var e = r.estadoReserva;
     var acciones = '';
@@ -461,7 +498,7 @@
     return '<div class="admin-card org-res org-est-' + e + (r.etapa ? ' org-etapa-' + r.etapa : '') + '" data-res-card="' + esc(r.idReserva) + '" data-res=\'' + esc(JSON.stringify(r)) + '\'>' +
       '<div class="org-res-head"><span class="org-pill">' + esc(etiqueta) + '</span><span class="org-muted">' + esc(r.idReserva) + ' · ' + esc(r.codigoReserva) + '</span></div>' +
       '<div class="org-res-cruce">' + esc(r.parejaA) + ' <span class="org-muted">vs</span> ' + esc(r.parejaB) + '</div>' +
-      '<div class="org-res-meta"><span>' + esc(r.categoria) + '</span><span>📅 ' + esc(fechaCorta(r.fecha)) + ' ' + esc(r.horarioInicio) + '–' + esc(r.horarioFin) + '</span></div>' +
+      '<div class="org-res-meta">' + tagFecha(r) + '<span>' + esc(r.categoria) + '</span><span>📅 ' + esc(fechaCorta(r.fecha)) + ' ' + esc(r.horarioInicio) + '–' + esc(r.horarioFin) + '</span></div>' +
       '<div class="org-res-meta"><span>👤 ' + esc(r.nombreSolicitante) + '</span><a href="tel:' + esc(r.telefonoSolicitante) + '">📞 ' + esc(r.telefonoSolicitante) + '</a>' +
         (conDetalle ? '' : '<span>Seña ' + plata(r.montoPagado) + '</span>') + '</div>' +
       (r.comprobanteUrl ? '<a class="admin-comprobante-link" href="' + esc(r.comprobanteUrl) + '" target="_blank" rel="noopener">Ver comprobante</a>' : '<span class="hint-line">Sin comprobante</span>') +
@@ -482,7 +519,7 @@
   function repintarTarjeta(card, r) {
     var tmp = document.createElement('div');
     tmp.innerHTML = tarjetaReserva(r);
-    card.replaceWith(tmp.firstChild);
+    card.replaceWith(tmp.firstChild); completarFechas();
   }
 
   function accionReserva(el, accion) {
@@ -537,13 +574,13 @@
           dia.bloqueos.filter(function (b) { return !dia.franjas.some(function (fr) { return fr.bloqueos.some(function (x) { return x.id === b.id; }); }); }).map(lineaBloqueo).join('') +
         '</div>';
       }).join('');
-      vista().innerHTML = html;
+      vista().innerHTML = html; completarFechas();
     }).catch(errorVista);
   }
   function lineaAgenda(r) {
     return '<div class="org-ag-linea org-est-' + r.estadoReserva + '">' +
       '<span class="org-cancha">C' + esc(r.cancha) + '</span>' +
-      '<span class="org-ag-tx"><b>' + esc(r.parejaA) + ' vs ' + esc(r.parejaB) + '</b><span class="org-muted">' + esc(r.categoria) + ' · ' + esc(r.horarioInicio) + ' · ' + esc(EST_TX[r.estadoReserva]) + (r.estadoPago === 'PAGO_COMPLETO' ? ' · Pagado' : '') + '</span></span>' +
+      '<span class="org-ag-tx"><b>' + esc(r.parejaA) + ' vs ' + esc(r.parejaB) + '</b>' + tagFecha(r) + '<span class="org-muted">' + esc(r.categoria) + ' · ' + esc(r.horarioInicio) + ' · ' + esc(EST_TX[r.estadoReserva]) + (r.estadoPago === 'PAGO_COMPLETO' ? ' · Pagado' : '') + '</span></span>' +
       '<a class="org-link" href="' + esc(linkWa(r.telefonoSolicitante, mensajeWa(r, 'recordatorio'))) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a>' +
     '</div>';
   }
@@ -909,7 +946,7 @@
     'fej-todas': function (el) {
       var v = $('#orgFejTodas').value;
       if (!v) { toast('Escribí el número de fecha.', 'error'); return; }
-      conBoton(el, api('adminFechaEnJuegoTodas', { fecha: Number(v) }), 'Fecha ' + v + ' en juego para todas las categorías').then(function () { st.resumen = null; vInicio(); }).catch(function () {});
+      conBoton(el, api('adminFechaEnJuegoTodas', { fecha: Number(v) }), 'Fecha ' + v + ' en juego para todas las categorías').then(function () { st.resumen = null; st.fixFechas = null; vInicio(); }).catch(function () {});
     },
     'limpiar-busqueda': function () { st.busqueda = ''; vReservas(); },
     aprobar: function (el) { accionReserva(el, 'aprobar'); },
@@ -1140,6 +1177,7 @@
     }
     if (t.hasAttribute('data-fej-cat')) {
       var cat = t.getAttribute('data-fej-cat');
+      st.fixFechas = null;
       api('adminFechaEnJuego', { categoria: cat, fecha: t.value === '' ? '' : Number(t.value) }).then(function () {
         toast(cat + ': fecha ' + (t.value || '—') + ' en juego');
         st.resumen = null;
