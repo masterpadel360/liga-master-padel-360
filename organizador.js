@@ -427,10 +427,39 @@
     }).join('');
     return '<div class="org-bloque">' +
       '<div class="org-bloque-tit"><b>Pagos</b><span class="org-muted">' + pagados + '/4 · ' + plata(cuota) + ' c/u' + (pagados === 4 ? ' · ✅ completo' : ' · falta ' + plata(r.valorTotal - Math.round(r.valorTotal * pagados / 4))) + '</span></div>' +
-      (r.senaIndice === null || r.senaIndice === undefined ? '<p class="org-muted org-mini">No reconocí quién pagó la seña (' + esc(r.nombreSolicitante) + '): tocá "Seña" al lado de esa persona.</p>' : '') +
+      (r.senaIndice === null || r.senaIndice === undefined ? (function () {
+        var g = adivinarSena(r.nombreSolicitante, r.jugadores);
+        return g === null
+          ? '<p class="org-muted org-mini">No reconocí quién pagó la seña (' + esc(r.nombreSolicitante) + '): tocá "Seña" al lado de esa persona.</p>'
+          : '<div class="org-sena-sug"><span>La seña la pagó <b>' + esc(r.jugadores[g]) + '</b> (reservó como ' + esc(r.nombreSolicitante) + ').</span>' +
+            '<button class="rsv-btn-aprobar" data-org="pago-sena" data-id="' + esc(r.idReserva) + '" data-i="' + g + '" type="button">Confirmar seña</button></div>';
+      })() : '') +
       filas +
       (pagados < 4 ? '<button class="org-link" data-org="pago" data-completo="1" data-id="' + esc(r.idReserva) + '" type="button">Marcar todos pagados</button>' : '') +
     '</div>';
+  }
+  // Adivina quién pagó la seña aunque el nombre esté escrito distinto (Giuliana / Giulliana, Supicciati / Supicciatti).
+  function normNombre(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zñ\s]/g, ' ').replace(/(.)\1+/g, '$1'); }
+  function casiIgual(a, b) {
+    if (a === b) return true;
+    if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+    var i = 0, j = 0, dif = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++dif > 1) return false;
+      if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+    }
+    return dif + (a.length - i) + (b.length - j) <= 1;
+  }
+  function adivinarSena(nombre, jugadores) {
+    var pal = normNombre(nombre).split(/\s+/).filter(function (w) { return w.length >= 3; });
+    var pts = (jugadores || []).map(function (j) {
+      var pj = normNombre(j).split(/\s+/).filter(Boolean);
+      return pal.filter(function (w) { return pj.some(function (x) { return casiIgual(w, x); }); }).length;
+    });
+    var max = Math.max.apply(null, pts.concat([0]));
+    if (!max || pts.filter(function (n) { return n === max; }).length > 1) return null;
+    return pts.indexOf(max);
   }
   function seccionResultado(r) {
     var p = r.partido;

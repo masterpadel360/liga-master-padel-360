@@ -216,3 +216,7 @@ select.org-input{appearance:auto}
 .org-fecha-fix:empty{display:none}
 .org-fecha-fix.is-atrasada{background:var(--warn-bg);color:var(--warn)}
 .org-ag-tx .org-fecha-fix{align-self:flex-start;margin:1px 0}
+
+/* Sugerencia de quién pagó la seña */
+.org-sena-sug{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:var(--surface-strong);font-size:.82rem;margin:4px 0}
+.org-sena-sug .rsv-btn-aprobar{flex:none;padding:8px 14px;font-size:.8rem}

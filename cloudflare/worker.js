@@ -792,15 +792,25 @@ function jugadoresDe(r) {
   const a = txt(r.pareja_a).split(' / '), b = txt(r.pareja_b).split(' / ');
   return [a[0], a[1], b[0], b[1]].map((x) => txt(x));
 }
+// Tolera nombres escritos distinto: letras dobles (Giulliana/Giuliana) y una letra de diferencia.
+const normNombre = (t) => sinAcentos(t).replace(/[^a-zñ\s]/g, ' ').replace(/(.)\1+/g, '$1');
+function casiIgual(a, b) {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, dif = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++dif > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return dif + (a.length - i) + (b.length - j) <= 1;
+}
 function adivinarSena(nombre, jugadores) {
-  const palabras = sinAcentos(nombre).split(/\s+/).filter((w) => w.length >= 3);
-  let mejor = null, puntos = 0;
-  jugadores.forEach((j, i) => {
-    const pj = sinAcentos(j).split(/\s+/);
-    const n = palabras.filter((w) => pj.includes(w)).length;
-    if (n > puntos) { puntos = n; mejor = i; }
-  });
-  return mejor;
+  const palabras = normNombre(nombre).split(/\s+/).filter((w) => w.length >= 3);
+  const pts = jugadores.map((j) => { const pj = normNombre(j).split(/\s+/).filter(Boolean); return palabras.filter((w) => pj.some((x) => casiIgual(w, x))).length; });
+  const max = Math.max(0, ...pts);
+  if (!max || pts.filter((n) => n === max).length > 1) return null;
+  return pts.indexOf(max);
 }
 function estadoPagos(r) {
   const jugadores = jugadoresDe(r);
