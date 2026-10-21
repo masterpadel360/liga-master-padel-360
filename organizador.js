@@ -457,14 +457,15 @@
       return Promise.all(cats.map(function (c) { return api('adminPartidos', { categoria: c }).catch(function () { return null; }); }));
     }).then(function (rs) {
       var m = {};
-      rs.forEach(function (d) { if (d && d.partidos) d.partidos.forEach(function (p) { m[p.idPartido] = { n: p.fecha, enJuego: d.fechaEnJuego }; }); });
+      rs.forEach(function (d) { if (d && d.partidos) d.partidos.forEach(function (p) { m[p.idPartido] = { n: p.fecha, enJuego: d.fechaEnJuego, estado: p.estado }; }); });
       st.fixFechas = m; st.fixFechasTs = Date.now(); fixCarga = null; return m;
     }, function (e) { fixCarga = null; throw e; });
     return fixCarga;
   }
   function txtFecha(id) {
     var x = st.fixFechas && st.fixFechas[id]; if (!x || x.n == null) return '';
-    var atr = x.enJuego != null && Number(x.n) < Number(x.enJuego);
+    // "Atrasado" solo si todavía no tiene resultado; si ya se jugó, solo se muestra la fecha.
+    var atr = x.enJuego != null && Number(x.n) < Number(x.enJuego) && x.estado !== 'JUGADO';
     return 'Fecha ' + x.n + (atr ? ' · atrasado' : '');
   }
   function tagFecha(r) {
@@ -975,7 +976,7 @@
       fila.querySelectorAll('[data-set]').forEach(function (i) { sets['set' + i.getAttribute('data-set')] = i.value.trim(); });
       var det = el.closest('details');
       if (det) st.fechaAbierta[st.catResultados] = det.getAttribute('data-fecha-num');
-      conBoton(el, api('adminGuardarResultado', Object.assign({ idPartido: fila.getAttribute('data-partido') }, sets))).then(function (r) {
+      st.fixFechas = null; conBoton(el, api('adminGuardarResultado', Object.assign({ idPartido: fila.getAttribute('data-partido') }, sets))).then(function (r) {
         toast(r.estado === 'JUGADO' ? 'Resultado guardado ✅ La tabla ya se actualizó.' : 'Guardado (el partido sigue pendiente).');
         return api('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
       }).catch(function () {});
@@ -1041,7 +1042,7 @@
       var x = datosTarjeta(el), bloque = el.closest('[data-partido]');
       var sets = {};
       bloque.querySelectorAll('[data-set]').forEach(function (i) { sets['set' + i.getAttribute('data-set')] = i.value.trim(); });
-      conBoton(el, api('adminGuardarResultado', Object.assign({ idPartido: bloque.getAttribute('data-partido') }, sets))).then(function (r) {
+      st.fixFechas = null; conBoton(el, api('adminGuardarResultado', Object.assign({ idPartido: bloque.getAttribute('data-partido') }, sets))).then(function (r) {
         x.r.partido = Object.assign({}, x.r.partido, { estado: r.estado, set1: r.set1, set2: r.set2, set3: r.set3, ganadorId: r.ganadorId });
         repintarTarjeta(x.card, x.r);
         toast(r.estado === 'JUGADO' ? 'Resultado guardado ✅ Ya se ve en resultados y posiciones.' : 'Guardado (el partido sigue sin resultado completo).');
