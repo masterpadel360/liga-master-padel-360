@@ -298,6 +298,17 @@ function renderScoreboard_(parejaA, parejaB, sets, ganador) {
     '</div>';
 }
 
+// Partido jugado (fixture y resultados). Si se ganó por W.O. porque el
+// rival se dio de baja, se avisa en la tarjeta para que nadie piense que
+// se jugó de verdad.
+function renderTarjetaJugada_(p) {
+  if (!p.wo) return '<div class="match-card">' + renderScoreboard_(p.parejaA, p.parejaB, p.sets, p.ganador) + '</div>';
+  var deBaja = p.ganador === p.parejaA ? p.parejaB : p.parejaA;
+  return '<div class="match-card match-wo"><span class="match-wo-tag">W.O. · pareja dada de baja</span>' +
+    renderScoreboard_(p.parejaA, p.parejaB, p.sets, p.ganador) +
+    '<span class="match-wo-nota">' + esc_(deBaja) + ' se dio de baja de la liga. El partido no se juega.</span></div>';
+}
+
 // ============================================================
 // Navegación
 // ============================================================
@@ -694,7 +705,7 @@ function renderFixture_(datos) {
   // esos datos hoy. Apenas existan en la planilla, se agregan sin tocar
   // el resto de la tarjeta.
   var html = fecha.partidos.map(function (p) {
-    if (p.estado === 'JUGADO') return '<div class="match-card">' + renderScoreboard_(p.parejaA, p.parejaB, p.sets, p.ganador) + '</div>';
+    if (p.estado === 'JUGADO') return renderTarjetaJugada_(p);
     return '<div class="match-card"><span class="match-pending-tag">Pendiente</span>' +
       '<div class="match-pair"><span class="avatar">' + iniciales_(p.parejaA) + '</span><span class="nm">' + esc_(p.parejaA) + '</span></div>' +
       '<div class="vs-div">VS</div>' +
@@ -739,7 +750,7 @@ function renderResultados_(lista) {
   });
   cont.innerHTML = orden.map(function (fecha) {
     var tarjetas = porFecha[fecha].map(function (r) {
-      return '<div class="match-card">' + renderScoreboard_(r.parejaA, r.parejaB, r.sets, r.ganador) + '</div>';
+      return renderTarjetaJugada_(r);
     }).join('');
     return '<div class="fecha-block-label">Fecha ' + fecha + '</div>' + tarjetas;
   }).join('');

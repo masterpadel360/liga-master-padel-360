@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS partidos (
   set2         TEXT NOT NULL DEFAULT '',
   set3         TEXT NOT NULL DEFAULT '',
   ganador_id   TEXT NOT NULL DEFAULT '',
-  estado       TEXT NOT NULL DEFAULT 'PENDIENTE'  -- PENDIENTE | JUGADO
+  estado       TEXT NOT NULL DEFAULT 'PENDIENTE', -- PENDIENTE | JUGADO
+  wo           INTEGER NOT NULL DEFAULT 0         -- 1 = ganado por W.O. (el rival se dio de baja)
 );
 CREATE INDEX IF NOT EXISTS idx_partidos_cat ON partidos(categoria, fecha);
 

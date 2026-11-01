@@ -383,6 +383,11 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:.82rem;
 }
 .bye-card b{color:var(--text)}
+.match-wo-tag{
+  align-self:flex-end;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  padding:3px 10px;border-radius:999px;background:var(--surface-strong);color:var(--text-dim);border:1px solid var(--border);
+}
+.match-wo-nota{font-size:.72rem;color:var(--text-faint);padding:0 2px}
 .fecha-block-label{font-size:.68rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;padding:2px 2px}
 
 /* ---------- scoreboard (fixture jugado + resultados) ---------- */

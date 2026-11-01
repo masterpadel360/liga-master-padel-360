@@ -693,6 +693,7 @@
       '<div class="org-partido-parejas">' +
         '<span class="' + gana(p.parejaAId) + '">' + esc(p.parejaA) + '</span>' +
         '<span class="' + gana(p.parejaBId) + '">' + esc(p.parejaB) + '</span>' +
+        (p.wo ? '<span class="org-pill">W.O. · baja</span>' : '') +
       '</div>' +
       '<div class="org-sets">' +
         [1, 2, 3].map(function (i) {
@@ -702,6 +703,28 @@
       '</div>' +
       (p.reserva ? '<div class="org-muted org-mini">Reserva: ' + esc(fechaCorta(p.reserva.fecha)) + ' ' + esc(p.reserva.horarioInicio) + ' · ' + esc(EST_TX[p.reserva.estado]) + '</div>' : '') +
     '</div>';
+  }
+
+  // Dar de baja: muestra qué partidos quedan como están, cuáles gana el rival
+  // 6-0 6-0 por W.O. y qué reservas se cancelan; recién ahí lo hace.
+  function darDeBajaConWo(btn, idPareja) {
+    return conBoton(btn, api('adminDarDeBaja', { idPareja: idPareja, simular: true })).then(function (r) {
+      var lineas = ['¿Dar de baja a ' + r.pareja + ' (' + r.categoria + ')?', ''];
+      lineas.push('Partidos ya jugados (' + r.jugados.length + '): quedan como están.');
+      r.jugados.forEach(function (x) { lineas.push('  · Fecha ' + x.fecha + ' vs ' + x.rival + (x.gano ? ' (ganó)' : ' (perdió)')); });
+      lineas.push('', 'Partidos que faltaban (' + r.wo.length + '): los gana el rival 6-0 6-0 por W.O.');
+      r.wo.forEach(function (x) { lineas.push('  · Fecha ' + x.fecha + ' → gana ' + x.rival); });
+      if (r.reservasCanceladas.length) {
+        lineas.push('', '⚠️ Reservas de cancha que se cancelan (' + r.reservasCanceladas.length + '):');
+        r.reservasCanceladas.forEach(function (x) {
+          lineas.push('  · ' + fechaCorta(x.fecha) + ' ' + x.horarioInicio + ' · cancha ' + x.cancha + (x.montoPagado ? ' · pagaron $' + Number(x.montoPagado).toLocaleString('es-AR') + ' (ver devolución)' : ''));
+        });
+      }
+      if (!confirm(lineas.join('\n'))) return;
+      return conBoton(btn, api('adminDarDeBaja', { idPareja: idPareja }), 'Pareja dada de baja · ' + r.wo.length + ' W.O. cargados').then(function () {
+        st.editPareja = null; st.resumen = null; st.fixFechas = null; vParejas();
+      });
+    });
   }
 
   // ============================================================ PAREJAS
@@ -739,6 +762,7 @@
               '<span class="org-muted">' + esc(p.id) + '</span>' +
               '<span class="org-pareja-tx">' + esc(p.jugador1) + ' / ' + esc(p.jugador2) + (p.estado === 'BAJA' ? ' <em>(baja)</em>' : '') + '</span>' +
               '<button class="org-link" data-org="editar-pareja" data-pareja=\'' + esc(JSON.stringify(p)) + '\' type="button">Editar</button>' +
+              (p.estado === 'ACTIVA' ? '<button class="org-link org-danger" data-org="baja-pareja" data-id="' + esc(p.id) + '" type="button">Dar de baja</button>' : '') +
             '</div>';
           }).join('') : '<p class="state-empty">Sin parejas en esta categoría.</p>') +
         '</div>' +
@@ -1015,8 +1039,18 @@
     'guardar-pareja': function (el) {
       var datos = { categoria: $('#pcat').value, jugador1: $('#pj1').value, jugador2: $('#pj2').value, estado: $('#pest').value };
       if (st.editPareja) datos.id = st.editPareja.id;
-      conBoton(el, api('adminGuardarPareja', datos), st.editPareja ? 'Pareja actualizada' : 'Pareja agregada').then(function () { st.editPareja = null; st.resumen = null; vParejas(); }).catch(function () {});
+      // Pasar de activa a "De baja": primero se guardan los otros cambios y
+      // después se da de baja con W.O. (mostrando antes qué va a pasar).
+      if (st.editPareja && st.editPareja.estado === 'ACTIVA' && datos.estado === 'BAJA') {
+        datos.estado = 'ACTIVA';
+        conBoton(el, api('adminGuardarPareja', datos)).then(function () { return darDeBajaConWo(el, datos.id); }).catch(function () {});
+        return;
+      }
+      var reactivar = st.editPareja && st.editPareja.estado === 'BAJA' && datos.estado === 'ACTIVA';
+      if (reactivar && !confirm('¿Volver a activar esta pareja?\n\nLos partidos que se le habían dado por W.O. a sus rivales vuelven a quedar pendientes (sin resultado).')) return;
+      conBoton(el, api('adminGuardarPareja', datos), st.editPareja ? 'Pareja actualizada' : 'Pareja agregada').then(function () { st.editPareja = null; st.resumen = null; st.fixFechas = null; vParejas(); }).catch(function () {});
     },
+    'baja-pareja': function (el) { darDeBajaConWo(el, el.getAttribute('data-id')); },
     'generar-fixture': function (el) {
       var cat = st.catParejas;
       conBoton(el, api('adminGenerarFixture', { categoria: cat })).then(function (r) {

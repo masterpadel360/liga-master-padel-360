@@ -445,7 +445,7 @@ async function aFixture(c) {
         idPartido: p.id, parejaA, parejaB,
         sets: [p.set1, p.set2, p.set3].filter(Boolean),
         ganador: p.ganador_id === p.pareja_a_id ? parejaA : p.ganador_id === p.pareja_b_id ? parejaB : '',
-        estado: p.estado,
+        estado: p.estado, wo: !!p.wo,
       };
     });
     fechas.push({ numero, partidos: items, libres: activas.filter((p) => !juegan.has(p.id)).map(nombrePareja) });
@@ -465,6 +465,7 @@ async function aResultados(c) {
       idPartido: p.id, fecha: p.fecha, parejaA, parejaB,
       sets: [p.set1, p.set2, p.set3].filter(Boolean),
       ganador: p.ganador_id === p.pareja_a_id ? parejaA : parejaB,
+      wo: !!p.wo,
     };
   });
 }
@@ -1070,7 +1071,7 @@ async function aAdminPartidos(c) {
         idPartido: p.id, fecha: p.fecha, estado: p.estado,
         parejaAId: p.pareja_a_id, parejaA: nombreLado(mapa, p.pareja_a_id, p.pareja_a_txt),
         parejaBId: p.pareja_b_id, parejaB: nombreLado(mapa, p.pareja_b_id, p.pareja_b_txt),
-        set1: p.set1, set2: p.set2, set3: p.set3, ganadorId: p.ganador_id,
+        set1: p.set1, set2: p.set2, set3: p.set3, ganadorId: p.ganador_id, wo: !!p.wo,
         reserva: r ? { fecha: r.fecha, horarioInicio: r.hora_inicio, cancha: r.cancha, estado: estadoReserva(r) } : null,
       };
     }),
@@ -1082,8 +1083,8 @@ async function aAdminGuardarResultado(c) {
   const p = await uno(c.db, 'SELECT * FROM partidos WHERE id = ?', id);
   if (!p) falla('No se encontró ese partido.');
   const r = resolverResultado(c.datos.set1, c.datos.set2, c.datos.set3, p.pareja_a_id, p.pareja_b_id);
-  await ejecutar(c.db, 'UPDATE partidos SET set1 = ?, set2 = ?, set3 = ?, ganador_id = ?, estado = ? WHERE id = ?', r.set1, r.set2, r.set3, r.ganadorId, r.estado, id);
-  return { idPartido: id, ...r };
+  await ejecutar(c.db, 'UPDATE partidos SET set1 = ?, set2 = ?, set3 = ?, ganador_id = ?, estado = ?, wo = 0 WHERE id = ?', r.set1, r.set2, r.set3, r.ganadorId, r.estado, id);
+  return { idPartido: id, ...r, wo: false };
 }
 async function aAdminFechaEnJuego(c) {
   await exigirAdmin(c);
@@ -1121,8 +1122,14 @@ async function aAdminGuardarPareja(c) {
   if (!(await uno(c.db, 'SELECT 1 FROM categorias WHERE nombre = ?', categoria))) falla('Elegí una categoría válida.');
   const id = txt(d.id);
   if (id) {
+    const antes = await uno(c.db, 'SELECT estado FROM parejas WHERE id = ?', id);
     const res = await ejecutar(c.db, 'UPDATE parejas SET categoria = ?, jugador1 = ?, jugador2 = ?, estado = ? WHERE id = ?', categoria, j1, j2, estado, id);
     if (res.meta.changes !== 1) falla('No se encontró esa pareja.');
+    // Vuelve a estar activa: los partidos que se habían dado por W.O. vuelven a quedar pendientes.
+    if (antes && antes.estado === 'BAJA' && estado === 'ACTIVA') {
+      await ejecutar(c.db, `UPDATE partidos SET set1 = '', set2 = '', set3 = '', ganador_id = '', estado = ?, wo = 0
+        WHERE wo = 1 AND (pareja_a_id = ? OR pareja_b_id = ?)`, PENDIENTE, id, id);
+    }
     // Si se corrigió un nombre, también se corrige en las reservas ya hechas de sus partidos.
     const nombre = nombrePareja({ jugador1: j1, jugador2: j2 });
     await c.db.batch([
@@ -1135,6 +1142,43 @@ async function aAdminGuardarPareja(c) {
     SELECT 'P' || printf('%03d', COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) + 1), ?, ?, ?, ? FROM parejas
     RETURNING id`, categoria, j1, j2, estado);
   return { id: fila.id };
+}
+// Da de baja una pareja: lo que ya jugó queda como está y cada partido que
+// le faltaba se lo gana su rival 6-0 6-0 por W.O. Las reservas de cancha de
+// esos partidos se cancelan para liberar el turno.
+// Con simular = true no cambia nada: devuelve qué haría (para mostrarlo antes).
+async function aAdminDarDeBaja(c) {
+  await exigirAdmin(c);
+  const id = txt(c.datos.idPareja);
+  const pareja = await uno(c.db, 'SELECT * FROM parejas WHERE id = ?', id);
+  if (!pareja) falla('No se encontró esa pareja.');
+  if (pareja.estado === 'BAJA') falla('Esa pareja ya está dada de baja.');
+  const { mapa } = await mapaParejas(c.db, pareja.categoria);
+  const partidos = await todos(c.db, 'SELECT * FROM partidos WHERE pareja_a_id = ? OR pareja_b_id = ? ORDER BY fecha, id', id, id);
+  const rivalDe = (p) => (p.pareja_a_id === id ? p.pareja_b_id : p.pareja_a_id);
+  const nombreRival = (p) => (p.pareja_a_id === id ? nombreLado(mapa, p.pareja_b_id, p.pareja_b_txt) : nombreLado(mapa, p.pareja_a_id, p.pareja_a_txt));
+  const jugados = partidos.filter((p) => p.estado === JUGADO);
+  const pendientes = partidos.filter((p) => p.estado !== JUGADO);
+  const reservas = pendientes.length
+    ? await todos(c.db, `SELECT * FROM reservas WHERE ${ACTIVA_SQL} AND id_partido IN (SELECT value FROM json_each(?))`, JSON.stringify(pendientes.map((p) => p.id)))
+    : [];
+  const resumen = {
+    pareja: nombrePareja(pareja), categoria: pareja.categoria,
+    jugados: jugados.map((p) => ({ idPartido: p.id, fecha: p.fecha, rival: nombreRival(p), gano: p.ganador_id === id })),
+    wo: pendientes.map((p) => ({ idPartido: p.id, fecha: p.fecha, rival: nombreRival(p) })),
+    reservasCanceladas: reservas.map((r) => ({ idReserva: r.id, fecha: r.fecha, horarioInicio: r.hora_inicio, cancha: r.cancha, montoPagado: r.monto_pagado, estado: estadoReserva(r) })),
+  };
+  if (c.datos.simular) return { simulado: true, ...resumen };
+  const ahora = Date.now();
+  const stmts = [c.db.prepare("UPDATE parejas SET estado = 'BAJA' WHERE id = ?").bind(id)];
+  for (const p of pendientes) {
+    const set = p.pareja_a_id === id ? '0-6' : '6-0';
+    stmts.push(c.db.prepare(`UPDATE partidos SET set1 = ?, set2 = ?, set3 = '', ganador_id = ?, estado = ?, wo = 1 WHERE id = ?`)
+      .bind(set, set, rivalDe(p), JUGADO, p.id));
+  }
+  for (const r of reservas) stmts.push(c.db.prepare('UPDATE reservas SET cancelada_ts = ? WHERE id = ? AND cancelada_ts IS NULL').bind(ahora, r.id));
+  await c.db.batch(stmts);
+  return { simulado: false, ...resumen };
 }
 async function aAdminCrearCategoria(c) {
   await exigirAdmin(c);
@@ -1600,6 +1644,11 @@ async function asegurarEsquema(db) {
   if (!col || !col.n) {
     try { await db.prepare("ALTER TABLE reservas ADD COLUMN pagos TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* ya existía */ }
   }
+  // Partidos ganados por W.O. porque el rival se dio de baja (1 = W.O.).
+  const colWo = await db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('partidos') WHERE name = 'wo'").first();
+  if (!colWo || !colWo.n) {
+    try { await db.prepare('ALTER TABLE partidos ADD COLUMN wo INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* ya existía */ }
+  }
   const sembradas = await db.prepare("SELECT valor FROM config WHERE clave = 'clases_sembradas'").first();
   if (!sembradas) {
     await db.batch([
@@ -1626,7 +1675,7 @@ const ACCIONES = {
   aprobarReserva: aAprobarReserva, rechazarReserva: aRechazarReserva, adminCancelarReserva: aAdminCancelarReserva, adminEliminarReserva: aAdminEliminarReserva, adminMarcarPago: aAdminMarcarPago,
   adminAgenda: aAdminAgenda, adminPartidos: aAdminPartidos, adminGuardarResultado: aAdminGuardarResultado,
   adminFechaEnJuego: aAdminFechaEnJuego, adminFechaEnJuegoTodas: aAdminFechaEnJuegoTodas,
-  adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminCrearCategoria: aAdminCrearCategoria,
+  adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminDarDeBaja: aAdminDarDeBaja, adminCrearCategoria: aAdminCrearCategoria,
   adminEliminarCategoria: aAdminEliminarCategoria, adminGenerarFixture: aAdminGenerarFixture,
   adminBloqueos: aAdminBloqueos, adminCrearBloqueo: aAdminCrearBloqueo, adminEliminarBloqueo: aAdminEliminarBloqueo, adminEditarBloqueo: aAdminEditarBloqueo,
   adminClases: aAdminClases, adminGuardarClase: aAdminGuardarClase, adminEliminarClase: aAdminEliminarClase,

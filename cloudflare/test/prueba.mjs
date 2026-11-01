@@ -315,6 +315,71 @@ console.log('13) Parejas de baja no se pueden reservar');
   check((await ok('partidosDisponibles', { categoria: cat }, 'GET')).some((y) => y.idPartido === x.idPartido), 'al reactivarla vuelve a aparecer');
 }
 
+console.log('14) Dar de baja con W.O.');
+{
+  const cat = datosImport.categorias[0].nombre;
+  const { parejas } = await ok('adminParejas', A({ categoria: cat }));
+  const activas = parejas.filter((p) => p.categoria === cat && p.estado === 'ACTIVA');
+  const todosPt = (await ok('adminPartidos', A({ categoria: cat }))).partidos;
+  // Elijo una pareja con al menos un partido pendiente.
+  const baja = activas.find((p) => todosPt.some((x) => x.estado !== 'JUGADO' && (x.parejaAId === p.id || x.parejaBId === p.id)));
+  check(!!baja, 'hay una pareja con partidos pendientes');
+  let mios = todosPt.filter((x) => x.parejaAId === baja.id || x.parejaBId === baja.id);
+  // Me aseguro de tener un partido ya jugado (que debe quedar igual): le cargo una derrota.
+  const yaJugado = mios.find((x) => x.estado === 'JUGADO') || mios[0];
+  if (yaJugado.estado !== 'JUGADO') await ok('adminGuardarResultado', A({ idPartido: yaJugado.idPartido, set1: yaJugado.parejaAId === baja.id ? '3-6' : '6-3', set2: yaJugado.parejaAId === baja.id ? '4-6' : '6-4' }));
+  mios = (await ok('adminPartidos', A({ categoria: cat }))).partidos.filter((x) => x.parejaAId === baja.id || x.parejaBId === baja.id);
+  const jugadoAntes = mios.find((x) => x.idPartido === yaJugado.idPartido);
+  const pend = mios.filter((x) => x.estado !== 'JUGADO');
+  check(pend.length > 0, 'quedan partidos pendientes para el W.O.');
+  // Una reserva activa sobre un partido pendiente: se tiene que cancelar.
+  await DB.prepare(`INSERT INTO reservas (id, token, codigo, fecha, hora_inicio, hora_fin, cancha, categoria, id_partido, creada_ts, aprobada_ts)
+    VALUES ('R-WO', 'tok-wo', 'CODWO', '2099-01-01', '18:00', '19:30', 1, ?, ?, 1, 1)`).bind(cat, pend[0].idPartido).run();
+
+  const posAntes = await ok('posiciones', { categoria: cat }, 'GET');
+  const sim = await ok('adminDarDeBaja', A({ idPareja: baja.id, simular: true }));
+  check(sim.simulado === true && sim.wo.length === pend.length, 'simular lista los W.O.', sim);
+  check(sim.reservasCanceladas.some((x) => x.idReserva === 'R-WO'), 'simular lista la reserva a cancelar', sim.reservasCanceladas);
+  check(JSON.stringify(await ok('posiciones', { categoria: cat }, 'GET')) === JSON.stringify(posAntes), 'simular no cambia nada');
+
+  const r = await ok('adminDarDeBaja', A({ idPareja: baja.id }));
+  check(r.simulado === false, 'baja hecha');
+  const despues = (await ok('adminPartidos', A({ categoria: cat }))).partidos.filter((x) => x.parejaAId === baja.id || x.parejaBId === baja.id);
+  for (const x of despues) {
+    const antes = mios.find((y) => y.idPartido === x.idPartido);
+    if (antes.estado === 'JUGADO') {
+      check(x.set1 === antes.set1 && x.set2 === antes.set2 && x.ganadorId === antes.ganadorId && !x.wo, 'lo ya jugado queda igual', x);
+    } else {
+      const rival = x.parejaAId === baja.id ? x.parejaBId : x.parejaAId;
+      const esperado = x.parejaAId === baja.id ? '0-6' : '6-0';
+      check(x.estado === 'JUGADO' && x.wo && x.ganadorId === rival && x.set1 === esperado && x.set2 === esperado && x.set3 === '', 'W.O. 6-0 6-0 para el rival', x);
+    }
+  }
+  check(!!(await DB.prepare("SELECT cancelada_ts FROM reservas WHERE id = 'R-WO'").first()).cancelada_ts, 'reserva cancelada');
+  const pos = await ok('posiciones', { categoria: cat }, 'GET');
+  check(!pos.some((f) => f.idPareja === baja.id), 'la pareja de baja no está en posiciones');
+  const rival0 = pend[0].parejaAId === baja.id ? pend[0].parejaBId : pend[0].parejaAId;
+  const fa = posAntes.find((f) => f.idPareja === rival0), fd = pos.find((f) => f.idPareja === rival0);
+  check(fd.pts === fa.pts + 1 && fd.pg === fa.pg + 1 && fd.pj === fa.pj + 1 && fd.difSets === fa.difSets + 2 && fd.difGames === fa.difGames + 12, 'el rival suma 1 punto, 2 sets y 12 games', { fa, fd });
+  const fix = await ok('fixture', { categoria: cat }, 'GET');
+  const enFix = fix.fechas.flatMap((f) => f.partidos).find((x) => x.idPartido === pend[0].idPartido);
+  check(enFix.wo === true && enFix.sets.length === 2, 'el fixture marca el W.O.', enFix);
+  const res = await ok('resultados', { categoria: cat }, 'GET');
+  check(res.find((x) => x.idPartido === pend[0].idPartido).wo === true, 'resultados marca el W.O.');
+  check(res.find((x) => x.idPartido === jugadoAntes.idPartido).wo === false, 'resultado real sin marca');
+  check((await api('adminDarDeBaja', A({ idPareja: baja.id }))).ok === false, 'no se puede dar de baja dos veces');
+
+  // Si un W.O. se corrige a mano, deja de ser W.O.
+  await ok('adminGuardarResultado', A({ idPartido: pend[0].idPartido, set1: '6-4', set2: '6-4' }));
+  check((await ok('resultados', { categoria: cat }, 'GET')).find((x) => x.idPartido === pend[0].idPartido).wo === false, 'resultado cargado a mano saca la marca W.O.');
+
+  // Reactivar: los W.O. que quedaban vuelven a pendientes.
+  await ok('adminGuardarPareja', A({ ...baja, estado: 'ACTIVA' }));
+  const re = (await ok('adminPartidos', A({ categoria: cat }))).partidos.filter((x) => x.parejaAId === baja.id || x.parejaBId === baja.id);
+  check(re.filter((x) => x.estado !== 'JUGADO').length === pend.length - 1 && !re.some((x) => x.wo), 'al reactivar, los W.O. vuelven a pendientes', re);
+  check(re.find((x) => x.idPartido === jugadoAntes.idPartido).estado === 'JUGADO', 'al reactivar, lo jugado queda');
+}
+
 console.log('11) Publicar: reiniciar todo como está en la planilla');
 const antesG = await ok('adminGrilla', A());
 check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');
