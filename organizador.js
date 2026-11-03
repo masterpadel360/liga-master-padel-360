@@ -300,30 +300,39 @@
     if (r.estado === 'PENDIENTE_APROBACION') return { cls: 'ok', tx: 'Reserva para aprobar · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
     return { cls: 'ok', tx: 'Reservado · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
   }
+  var LINK_LIGA = 'https://masterpadel360.github.io/liga-master-padel-360/';
+  function msgAtrasado(c, p) {
+    return 'Buenas, ¿cómo están? 👋 Les escribo de la Liga Master Pádel 360.\n\n' +
+      'Tienen pendiente el partido de la *fecha ' + p.fecha + '* (' + c + '):\n*' + p.parejaA + '* vs *' + p.parejaB + '*\n\n' +
+      'Pónganse de acuerdo y resérvenlo desde la app así no se atrasa más 🎾\n' + LINK_LIGA + '\n\n¡Gracias!';
+  }
   function vAtrasados() {
     genVista++; var g = genVista;
     cargarAtrasados().then(function (cats) {
       if (g !== genVista) return;
-      var tot = 0, sin = 0, res = 0;
-      cats.forEach(function (c) { c.partidos.forEach(function (p) { tot++; var e = estadoAtrasado(p); if (e.cls === 'sin') sin++; if (e.cls === 'res') res++; }); });
+      // Solo los que no tienen ninguna reserva: los reservados ya están en camino.
+      var reservados = 0;
+      cats.forEach(function (c) { var t = c.partidos.length; c.partidos = c.partidos.filter(function (p) { return !p.reserva; }); reservados += t - c.partidos.length; });
+      var tot = cats.reduce(function (n, c) { return n + c.partidos.length; }, 0);
       var texto = cats.filter(function (c) { return c.partidos.length; }).map(function (c) {
-        return '*' + c.categoria + '* (' + c.partidos.length + ')\n' + c.partidos.map(function (p) { var e = estadoAtrasado(p); return '• F' + p.fecha + ': ' + p.parejaA + ' vs ' + p.parejaB + (e.cls === 'sin' ? '' : ' (' + e.tx + ')'); }).join('\n');
+        return '*' + c.categoria + '* (' + c.partidos.length + ')\n' + c.partidos.map(function (p) { return '• F' + p.fecha + ': ' + p.parejaA + ' vs ' + p.parejaB; }).join('\n');
       }).join('\n\n');
       vista().innerHTML =
         '<div class="org-stats">' +
-          '<div class="org-stat' + (tot ? ' is-alert' : '') + '"><b>' + tot + '</b><span>Partidos atrasados</span></div>' +
-          '<div class="org-stat"><b>' + sin + '</b><span>Sin reservar</span></div>' +
-          '<div class="org-stat"><b>' + res + '</b><span>Jugados sin resultado</span></div>' +
+          '<div class="org-stat' + (tot ? ' is-alert' : '') + '"><b>' + tot + '</b><span>Atrasados sin reservar</span></div>' +
+          '<div class="org-stat"><b>' + reservados + '</b><span>Atrasados que ya reservaron (no se muestran)</span></div>' +
         '</div>' +
-        '<p class="org-muted">Partidos de fechas anteriores a la que está en juego que todavía no tienen resultado cargado. Los que se dieron por W.O. no aparecen.</p>' +
-        (tot ? '<button class="rsv-copy-btn" data-org="copiar-atrasados" data-texto="' + esc(texto) + '" type="button">Copiar lista para WhatsApp</button>' : '') +
+        '<p class="org-muted">Partidos de fechas anteriores a la que está en juego que todavía no reservaron. En cada uno tenés el mensaje listo para mandarles a los jugadores.</p>' +
+        (tot ? '<button class="rsv-copy-btn" data-org="copiar-atrasados" data-texto="' + esc(texto) + '" type="button">Copiar la lista completa</button>' : '') +
         cats.map(function (c) {
-          if (!c.partidos.length) return '<div class="org-card"><h3>' + esc(c.categoria) + '</h3><p class="org-muted">Al día 🎉 (fecha en juego: ' + (c.fechaEnJuego || '–') + ')</p></div>';
+          if (!c.partidos.length) return '<div class="org-card"><h3>' + esc(c.categoria) + '</h3><p class="org-muted">Sin atrasados por reservar 🎉</p></div>';
           var cnt = {}; c.partidos.forEach(function (p) { [p.parejaA, p.parejaB].forEach(function (n) { cnt[n] = (cnt[n] || 0) + 1; }); });
           var deben = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a] || a.localeCompare(b); });
-          return '<div class="org-card"><div class="org-row org-spread"><h3>' + esc(c.categoria) + '</h3><span class="org-pill">' + c.partidos.length + ' atrasado' + (c.partidos.length === 1 ? '' : 's') + '</span></div>' +
-            c.partidos.map(function (p) { var e = estadoAtrasado(p);
-              return '<div class="org-atr org-atr-' + e.cls + '"><span class="org-atr-f">F' + p.fecha + '</span><span class="org-atr-tx"><span><b>' + esc(p.parejaA) + '</b> vs <b>' + esc(p.parejaB) + '</b></span><small>' + esc(e.tx) + '</small></span></div>'; }).join('') +
+          return '<div class="org-card"><div class="org-row org-spread"><h3>' + esc(c.categoria) + '</h3><span class="org-pill">' + c.partidos.length + ' sin reservar</span></div>' +
+            c.partidos.map(function (p) { var m = msgAtrasado(c.categoria, p);
+              return '<div class="org-atr org-atr-sin"><span class="org-atr-f">F' + p.fecha + '</span><span class="org-atr-tx"><span><b>' + esc(p.parejaA) + '</b> vs <b>' + esc(p.parejaB) + '</b></span>' +
+                '<span class="org-row" style="gap:8px;margin-top:4px"><a class="rsv-copy-btn" href="https://wa.me/?text=' + encodeURIComponent(m) + '" target="_blank" rel="noopener">Mandar por WhatsApp</a>' +
+                '<button class="org-link" data-org="copiar-atrasados" data-texto="' + esc(m) + '" type="button">Copiar mensaje</button></span></span></div>'; }).join('') +
             '<p class="org-muted org-mini" style="margin-top:8px">Deben: ' + deben.map(function (n) { return esc(n) + ' <b>' + cnt[n] + '</b>'; }).join(' · ') + '</p>' +
           '</div>';
         }).join('');
