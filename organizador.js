@@ -20,6 +20,7 @@
     { id: 'reservas', tx: 'Reservas' },
     { id: 'agenda', tx: 'Agenda' },
     { id: 'resultados', tx: 'Resultados' },
+    { id: 'atrasados', tx: 'Atrasados' },
     { id: 'parejas', tx: 'Parejas' },
     { id: 'horarios', tx: 'Horarios' },
     { id: 'contenido', tx: 'Contenido' },
@@ -230,7 +231,7 @@
     if (activo && activo.scrollIntoView) activo.scrollIntoView({ block: 'nearest', inline: 'center' });
     var v = $('#orgVista');
     v.innerHTML = '<div class="state-loading">Cargando…</div>';
-    ({ inicio: vInicio, reservas: vReservas, agenda: vAgenda, resultados: vResultados, parejas: vParejas, horarios: vHorarios, contenido: vContenido })[tab]();
+    ({ inicio: vInicio, reservas: vReservas, agenda: vAgenda, resultados: vResultados, atrasados: vAtrasados, parejas: vParejas, horarios: vHorarios, contenido: vContenido })[tab]();
   }
   function vista() { return $('#orgVista'); }
   function errorVista(e) { if (!vista()) return; vista().innerHTML = '<p class="state-empty">' + esc(e.message) + '</p><button class="rsv-copy-btn" data-org="recargar" type="button">Reintentar</button>'; }
@@ -255,6 +256,7 @@
           '<button class="org-stat" data-org="ir-proximas" type="button"><b>' + d.proximas + '</b><span>Turnos confirmados por jugar</span></button>' +
           '<button class="org-stat' + (d.porCerrar ? ' is-alert' : '') + '" data-org="ir-porcerrar" type="button"><b>' + (d.porCerrar || 0) + '</b><span>Jugados con pagos o resultado pendiente</span></button>' +
         '</div>' +
+        '<button class="org-card org-atr-ini" data-org="ir-atrasados" type="button" id="orgAtrIni"><b>Partidos atrasados</b><span class="org-muted">Contando…</span></button>' +
         '<div class="org-card">' +
           '<h3>Fecha en juego</h3>' +
           '<p class="org-muted">Hasta qué fecha del fixture pueden reservar los jugadores (incluye partidos atrasados).</p>' +
@@ -271,7 +273,61 @@
             '</div>';
           }).join('') + '</div>' +
         '</div>';
+      var gi = genVista;
+      cargarAtrasados().then(function (cats) { if (gi !== genVista) return; var b = $('#orgAtrIni'); if (!b) return; var n = 0, sin = 0; cats.forEach(function (c) { c.partidos.forEach(function (p) { n++; if (!p.reserva) sin++; }); });
+        b.innerHTML = '<b>' + (n ? n + ' partidos atrasados' : 'Sin partidos atrasados 🎉') + '</b><span class="org-muted">' + (n ? sin + ' sin reservar · tocá para ver quiénes son' : 'Todas las categorías al día') + '</span>'; }).catch(function () {});
     }).catch(errorVista);
+  }
+
+  // ============================================================ ATRASADOS
+  // Partidos de fechas anteriores a la que está en juego que todavía no tienen resultado.
+  function cargarAtrasados() {
+    return api('adminResumen').then(function (d) {
+      return Promise.all(d.categorias.map(function (c) { return api('adminPartidos', { categoria: c.nombre }); })).then(function (rs) {
+        return rs.map(function (r) {
+          var fej = Number(r.fechaEnJuego) || 0;
+          var lista = r.partidos.filter(function (p) { return fej && p.fecha < fej && p.estado !== 'JUGADO'; })
+            .sort(function (a, b) { return a.fecha - b.fecha || String(a.idPartido).localeCompare(String(b.idPartido)); });
+          return { categoria: r.categoria, fechaEnJuego: fej, partidos: lista };
+        });
+      });
+    });
+  }
+  function estadoAtrasado(p) {
+    var r = p.reserva;
+    if (!r) return { cls: 'sin', tx: 'Sin reservar' };
+    if (r.estado === 'FINALIZADO') return { cls: 'res', tx: 'Jugaban el ' + fechaCorta(r.fecha) + ' · falta resultado' };
+    if (r.estado === 'PENDIENTE_APROBACION') return { cls: 'ok', tx: 'Reserva para aprobar · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
+    return { cls: 'ok', tx: 'Reservado · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
+  }
+  function vAtrasados() {
+    genVista++; var g = genVista;
+    cargarAtrasados().then(function (cats) {
+      if (g !== genVista) return;
+      var tot = 0, sin = 0, res = 0;
+      cats.forEach(function (c) { c.partidos.forEach(function (p) { tot++; var e = estadoAtrasado(p); if (e.cls === 'sin') sin++; if (e.cls === 'res') res++; }); });
+      var texto = cats.filter(function (c) { return c.partidos.length; }).map(function (c) {
+        return '*' + c.categoria + '* (' + c.partidos.length + ')\n' + c.partidos.map(function (p) { var e = estadoAtrasado(p); return '• F' + p.fecha + ': ' + p.parejaA + ' vs ' + p.parejaB + (e.cls === 'sin' ? '' : ' (' + e.tx + ')'); }).join('\n');
+      }).join('\n\n');
+      vista().innerHTML =
+        '<div class="org-stats">' +
+          '<div class="org-stat' + (tot ? ' is-alert' : '') + '"><b>' + tot + '</b><span>Partidos atrasados</span></div>' +
+          '<div class="org-stat"><b>' + sin + '</b><span>Sin reservar</span></div>' +
+          '<div class="org-stat"><b>' + res + '</b><span>Jugados sin resultado</span></div>' +
+        '</div>' +
+        '<p class="org-muted">Partidos de fechas anteriores a la que está en juego que todavía no tienen resultado cargado. Los que se dieron por W.O. no aparecen.</p>' +
+        (tot ? '<button class="rsv-copy-btn" data-org="copiar-atrasados" data-texto="' + esc(texto) + '" type="button">Copiar lista para WhatsApp</button>' : '') +
+        cats.map(function (c) {
+          if (!c.partidos.length) return '<div class="org-card"><h3>' + esc(c.categoria) + '</h3><p class="org-muted">Al día 🎉 (fecha en juego: ' + (c.fechaEnJuego || '–') + ')</p></div>';
+          var cnt = {}; c.partidos.forEach(function (p) { [p.parejaA, p.parejaB].forEach(function (n) { cnt[n] = (cnt[n] || 0) + 1; }); });
+          var deben = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a] || a.localeCompare(b); });
+          return '<div class="org-card"><div class="org-row org-spread"><h3>' + esc(c.categoria) + '</h3><span class="org-pill">' + c.partidos.length + ' atrasado' + (c.partidos.length === 1 ? '' : 's') + '</span></div>' +
+            c.partidos.map(function (p) { var e = estadoAtrasado(p);
+              return '<div class="org-atr org-atr-' + e.cls + '"><span class="org-atr-f">F' + p.fecha + '</span><span class="org-atr-tx"><span><b>' + esc(p.parejaA) + '</b> vs <b>' + esc(p.parejaB) + '</b></span><small>' + esc(e.tx) + '</small></span></div>'; }).join('') +
+            '<p class="org-muted org-mini" style="margin-top:8px">Deben: ' + deben.map(function (n) { return esc(n) + ' <b>' + cnt[n] + '</b>'; }).join(' · ') + '</p>' +
+          '</div>';
+        }).join('');
+    }).catch(function (e) { if (g === genVista) errorVista(e); });
   }
 
   // ============================================================ RESERVAS
@@ -994,6 +1050,11 @@
     },
     salir: function () { if (confirm('¿Cerrar la sesión de organizador en este dispositivo?')) { borrarToken(); pintarLogin(); } },
     recargar: function () { irTab(st.tab); },
+    'ir-atrasados': function () { irTab('atrasados'); },
+    'copiar-atrasados': function (el) {
+      var t = el.getAttribute('data-texto') || '';
+      try { navigator.clipboard.writeText(t).then(function () { toast('Lista copiada ✅'); }, function () { toast('No se pudo copiar', 'error'); }); } catch (e) { toast('No se pudo copiar', 'error'); }
+    },
     'ir-pendientes': function () { st.filtroReservas = 'pendientes'; irTab('reservas'); },
     'ir-proximas': function () { st.filtroReservas = 'proximas'; irTab('reservas'); },
     'ir-porcerrar': function () { st.filtroReservas = 'porcerrar'; irTab('reservas'); },

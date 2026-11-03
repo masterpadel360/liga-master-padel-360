@@ -220,3 +220,13 @@ select.org-input{appearance:auto}
 /* Sugerencia de quién pagó la seña */
 .org-sena-sug{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:var(--surface-strong);font-size:.82rem;margin:4px 0}
 .org-sena-sug .rsv-btn-aprobar{flex:none;padding:8px 14px;font-size:.8rem}
+
+/* Partidos atrasados */
+.org-atr-ini{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.org-atr{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--border)}
+.org-atr-f{flex:0 0 auto;font-weight:800;font-size:.75rem;padding:3px 8px;border-radius:8px;background:var(--surface-strong)}
+.org-atr-tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.org-atr-tx small{font-size:.72rem;color:var(--text-dim)}
+.org-atr-ok .org-atr-tx small{color:#9fe0b0}
+.org-atr-res .org-atr-tx small{color:var(--gold)}
+.org-atr-sin .org-atr-tx small{color:var(--warn)}
