@@ -938,7 +938,7 @@
   function filaGrilla(f, dia) {
     var libres = libresPorClases(dia, f.inicio, f.fin);
     return '<div class="org-gfila"><input type="time" class="org-input" data-g="inicio" value="' + esc(f.inicio || '') + '">' +
-      '<span>a</span><input type="time" class="org-input" data-g="fin" value="' + esc(f.fin || '') + '">' +
+      '<span>a</span><input type="time" class="org-input" data-g="fin" value="' + esc(f.fin === '24:00' ? '00:00' : (f.fin || '')) + '">' +
       '<input type="number" min="1" class="org-input org-num" data-g="canchas" value="' + esc(f.canchas || (libres || 2)) + '" title="Canchas para la liga"><span class="org-muted">canchas</span>' +
       '<span class="org-libres-clases' + (libres !== null && Number(f.canchas) > libres ? ' is-aviso' : '') + '" data-g="libres">' + (libres === null ? '' : 'libres: ' + libres) + '</span>' +
       '<button class="org-link org-danger" data-org="g-quitar" type="button" title="Quitar">✕</button></div>';

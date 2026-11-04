@@ -90,6 +90,12 @@ check(ret && ret.idRetencion && ret.montoSena === 9000 && ret.valorTotal === 360
 const dispTras = await ok('disponibilidad', {}, 'GET');
 check(!dispTras.dias.find((d) => d.fecha === dia1.fecha).franjas.some((f) => f.inicio === '21:00'), 'la retención ocupa el último lugar');
 check((await api('retenerTurno', { ...turno, idPartido: cruces[1].idPartido })).error === 'Ese horario ya no tiene lugar disponible.', 'sin lugar: mensaje correcto');
+// Turno de 22:30 a 00:00 (se guarda como 24:00) de lunes a viernes
+const diaHab = dispTras.dias.find((d) => { const w = new Date(d.fecha + 'T12:00:00Z').getUTCDay(); return w >= 1 && w <= 5 && d.fecha > dia1.fecha; });
+const fr2230 = diaHab && diaHab.franjas.find((f) => f.inicio === '22:30');
+check(fr2230 && fr2230.fin === '24:00', 'turno 22:30 a 24:00 disponible de lunes a viernes', diaHab);
+const ret2230 = await api('retenerTurno', { idPartido: cruces[2].idPartido, fecha: diaHab.fecha, horarioInicio: '22:30', horarioFin: '24:00' });
+check(ret2230.ok && ret2230.data && ret2230.data.idRetencion || ret2230.idRetencion, 'se puede retener el turno de 22:30 a 24:00', ret2230);
 
 const png = 'data:image/png;base64,' + Buffer.from('fakepngdata').toString('base64');
 const conf = await ok('confirmarReserva', { idRetencion: ret.idRetencion, nombre: 'Juan', telefono: '351 600-7788', comprobanteBase64: png, comprobanteNombreArchivo: 'c.png', comprobanteTipoMime: 'image/png' });
@@ -186,7 +192,7 @@ check(!d4 || d4.franjas.length === 0 || d4.franjas.every((f) => f.inicio < '18:0
 await ok('adminEliminarBloqueo', A({ id: bl.id }));
 check((await ok('adminBloqueos', A())).length === 1, 'listar bloqueos futuros');
 const g = await ok('adminGrilla', A());
-check(g.dias.length === 7 && g.dias[0].nombre === 'Lunes' && g.dias[0].franjas.length === 3, 'grilla inicial cargada', g.dias[0]);
+check(g.dias.length === 7 && g.dias[0].nombre === 'Lunes' && g.dias[0].franjas.length === 4 && g.dias[0].franjas[3].inicio === '22:30' && g.dias[0].franjas[3].fin === '24:00', 'grilla inicial cargada (con el turno de 22:30 a 00:00)', g.dias[0]);
 check((await api('adminGuardarGrilla', A({ franjas: [{ dia: 1, inicio: '20:00', fin: '19:00', canchas: 2 }] }))).ok === false, 'grilla con horario al revés se rechaza');
 const todas = g.dias.flatMap((d) => d.franjas.map((f) => ({ dia: d.dia, ...f })));
 todas.push({ dia: 0, inicio: '10:00', fin: '11:30', canchas: 3 });

@@ -104,7 +104,9 @@ function parsearSet(t) {
   if (a === b) return null;
   return { a, b };
 }
-function esHora(h) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(h); }
+function esHora(h) { return /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/.test(h); }
+// Un turno que termina a la medianoche se guarda como "24:00" (así se compara bien con los demás horarios).
+function finHora(h) { const n = normalizarHora(h); return n === '00:00' ? '24:00' : n; }
 function esFechaISO(f) { return /^\d{4}-\d{2}-\d{2}$/.test(f) && !isNaN(Date.parse(f + 'T00:00:00Z')); }
 function normalizarHora(h) {
   const m = /^(\d{1,2}):(\d{2})/.exec(txt(h));
@@ -579,7 +581,7 @@ async function datosPartido(db, idPartido) {
 async function aRetenerTurno(c) {
   const d = c.datos;
   const idPartido = txt(d.idPartido), fecha = txt(d.fecha);
-  const inicio = normalizarHora(d.horarioInicio), fin = normalizarHora(d.horarioFin);
+  const inicio = normalizarHora(d.horarioInicio), fin = finHora(d.horarioFin);
   if (!idPartido || !esFechaISO(fecha) || !esHora(inicio) || !esHora(fin)) falla('Faltan datos para retener el turno.');
   const cfg = await leerConfig(c.db);
   const { minimo, maximo } = ventanaReservable(cfg);
@@ -1236,7 +1238,7 @@ async function aAdminBloqueos(c) {
 async function aAdminCrearBloqueo(c) {
   await exigirAdmin(c);
   const d = c.datos;
-  const fecha = txt(d.fecha), ini = normalizarHora(d.horaInicio), fin = normalizarHora(d.horaFin);
+  const fecha = txt(d.fecha), ini = normalizarHora(d.horaInicio), fin = finHora(d.horaFin);
   const cancha = mayus(d.cancha) || 'TODAS';
   const cfg = await leerConfig(c.db);
   if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
@@ -1273,7 +1275,7 @@ async function aAdminGuardarGrilla(c) {
   const cfg = await leerConfig(c.db);
   const franjas = Array.isArray(c.datos.franjas) ? c.datos.franjas : falla('Faltan las franjas.');
   const limpias = franjas.map((f) => {
-    const dia = Number(f.dia), ini = normalizarHora(f.inicio), fin = normalizarHora(f.fin), canchas = Number(f.canchas);
+    const dia = Number(f.dia), ini = normalizarHora(f.inicio), fin = finHora(f.fin), canchas = Number(f.canchas);
     if (!(dia >= 0 && dia <= 6)) falla('Día inválido.');
     if (!esHora(ini) || !esHora(fin) || fin <= ini) falla('Revisá los horarios del ' + NOMBRES_DIA[dia] + ' (' + ini + ' a ' + fin + ').');
     if (!(canchas >= 1 && canchas <= cfg.cantidadCanchas)) falla('Las canchas de cada turno van de 1 a ' + cfg.cantidadCanchas + '.');
@@ -1316,7 +1318,7 @@ async function aAdminClases(c) {
 async function aAdminGuardarClase(c) {
   await exigirAdmin(c);
   const d = c.datos, cfg = await leerConfig(c.db);
-  const dia = Number(d.dia), ini = normalizarHora(d.inicio), fin = normalizarHora(d.fin), canchas = Number(d.canchas) || 1;
+  const dia = Number(d.dia), ini = normalizarHora(d.inicio), fin = finHora(d.fin), canchas = Number(d.canchas) || 1;
   if (!(dia >= 0 && dia <= 6)) falla('Elegí el día.');
   validarHorario(ini, fin, 'la clase');
   if (!(canchas >= 1 && canchas <= cfg.cantidadCanchas)) falla('Las canchas van de 1 a ' + cfg.cantidadCanchas + '.');
@@ -1363,7 +1365,7 @@ async function calcularTurnosDia(c, fecha, desde, hasta, duracion) {
 async function aAdminCalcularTurnos(c) {
   await exigirAdmin(c);
   const d = c.datos;
-  return calcularTurnosDia(c, txt(d.fecha), normalizarHora(d.desde), normalizarHora(d.hasta), d.duracion);
+  return calcularTurnosDia(c, txt(d.fecha), normalizarHora(d.desde), finHora(d.hasta), d.duracion);
 }
 async function aAdminCrearTurnosFecha(c) {
   await exigirAdmin(c);
@@ -1371,7 +1373,7 @@ async function aAdminCrearTurnosFecha(c) {
   if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
   const cfg = await leerConfig(c.db);
   const turnos = (Array.isArray(c.datos.turnos) ? c.datos.turnos : []).map((t) => {
-    const ini = normalizarHora(t.inicio), fin = normalizarHora(t.fin), canchas = Number(t.canchas);
+    const ini = normalizarHora(t.inicio), fin = finHora(t.fin), canchas = Number(t.canchas);
     validarHorario(ini, fin);
     if (!(canchas >= 1 && canchas <= cfg.cantidadCanchas)) falla('Las canchas van de 1 a ' + cfg.cantidadCanchas + '.');
     return { fecha, inicio: ini, fin, canchas };
@@ -1391,7 +1393,7 @@ async function aAdminEliminarTurnoFecha(c) {
 async function aAdminEditarBloqueo(c) {
   await exigirAdmin(c);
   const d = c.datos, cfg = await leerConfig(c.db);
-  const fecha = txt(d.fecha), ini = normalizarHora(d.horaInicio), fin = normalizarHora(d.horaFin), cancha = mayus(d.cancha) || 'TODAS';
+  const fecha = txt(d.fecha), ini = normalizarHora(d.horaInicio), fin = finHora(d.horaFin), cancha = mayus(d.cancha) || 'TODAS';
   if (!esFechaISO(fecha)) falla('Elegí una fecha válida.');
   validarHorario(ini, fin);
   if (cancha !== 'TODAS' && !(Number(cancha) >= 1 && Number(cancha) <= cfg.cantidadCanchas)) falla('Elegí una cancha válida.');
@@ -1656,6 +1658,18 @@ async function asegurarEsquema(db) {
         json_extract(value,'$[2]'), 1, json_extract(value,'$[3]') FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM clases)`).bind(JSON.stringify(CLASES_INICIALES)),
       db.prepare("INSERT OR IGNORE INTO config (clave, valor) VALUES ('clases_sembradas', '1')"),
     ]);
+  }
+  // Nov 2026: Gabriel pidió habilitar de lunes a viernes el turno de 22:30 a 00:00 (último turno).
+  const t2230 = await db.prepare("SELECT valor FROM config WHERE clave = 'turno_2230_sembrado'").first();
+  if (!t2230) {
+    const ops = [];
+    for (let dia = 1; dia <= 5; dia++) {
+      ops.push(db.prepare(`INSERT INTO grilla (dia, inicio, fin, canchas) SELECT ?, '22:30', '24:00',
+        COALESCE((SELECT canchas FROM grilla WHERE dia = ? AND inicio = '21:00'), 3)
+        WHERE NOT EXISTS (SELECT 1 FROM grilla WHERE dia = ? AND inicio = '22:30')`).bind(dia, dia, dia));
+    }
+    ops.push(db.prepare("INSERT OR IGNORE INTO config (clave, valor) VALUES ('turno_2230_sembrado', '1')"));
+    await db.batch(ops);
   }
   ESQUEMA_AL_DIA = true;
 }
