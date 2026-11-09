@@ -37,6 +37,8 @@
     fechaAbierta: {},
     catParejas: null,
     editPareja: null,
+    volverAtrasados: false,
+    atrasados: null,
     resumen: null,
   };
   var root = null;
@@ -274,69 +276,101 @@
           }).join('') + '</div>' +
         '</div>';
       var gi = genVista;
-      cargarAtrasados().then(function (cats) { if (gi !== genVista) return; var b = $('#orgAtrIni'); if (!b) return; var n = 0, sin = 0; cats.forEach(function (c) { c.partidos.forEach(function (p) { n++; if (!p.reserva) sin++; }); });
-        b.innerHTML = '<b>' + (n ? n + ' partidos atrasados' : 'Sin partidos atrasados 🎉') + '</b><span class="org-muted">' + (n ? sin + ' sin reservar · tocá para ver quiénes son' : 'Todas las categorías al día') + '</span>'; }).catch(function () {});
+      api('adminAtrasados').then(function (a) {
+        if (gi !== genVista) return; var b = $('#orgAtrIni'); if (!b) return;
+        var t = a.totales, n = t.partidosSinReservar;
+        b.innerHTML = '<b>' + (n ? n + (n === 1 ? ' partido atrasado sin reservar' : ' partidos atrasados sin reservar') : 'Sin atrasados por reservar 🎉') + '</b>' +
+          '<span class="org-muted">' + (n ? (t.tocaAvisar ? t.tocaAvisar + (t.tocaAvisar === 1 ? ' pareja para avisar' : ' parejas para avisar') + ' · tocá para mandarles el WhatsApp' : 'Ya les avisaste a todas esta semana') :
+            (t.enCamino ? t.enCamino + ' ya reservaron o falta cerrar' : 'Todas las categorías al día')) + '</span>';
+      }).catch(function () {});
     }).catch(errorVista);
   }
 
   // ============================================================ ATRASADOS
-  // Partidos de fechas anteriores a la que está en juego que todavía no tienen resultado.
-  function cargarAtrasados() {
-    return api('adminResumen').then(function (d) {
-      return Promise.all(d.categorias.map(function (c) { return api('adminPartidos', { categoria: c.nombre }); })).then(function (rs) {
-        return rs.map(function (r) {
-          var fej = Number(r.fechaEnJuego) || 0;
-          var lista = r.partidos.filter(function (p) { return fej && p.fecha < fej && p.estado !== 'JUGADO'; })
-            .sort(function (a, b) { return a.fecha - b.fecha || String(a.idPartido).localeCompare(String(b.idPartido)); });
-          return { categoria: r.categoria, fechaEnJuego: fej, partidos: lista };
-        });
-      });
-    });
-  }
-  function estadoAtrasado(p) {
-    var r = p.reserva;
-    if (!r) return { cls: 'sin', tx: 'Sin reservar' };
-    if (r.estado === 'FINALIZADO') return { cls: 'res', tx: 'Jugaban el ' + fechaCorta(r.fecha) + ' · falta resultado' };
-    if (r.estado === 'PENDIENTE_APROBACION') return { cls: 'ok', tx: 'Reserva para aprobar · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
-    return { cls: 'ok', tx: 'Reservado · ' + fechaCorta(r.fecha) + ' ' + r.horarioInicio };
-  }
+  // Partidos de fechas anteriores a la que está en juego que no tienen resultado.
+  // Se ordena por pareja: a cada una se le manda UN WhatsApp con todos los
+  // partidos que debe y el contacto de cada rival. Cada envío queda anotado.
   var LINK_LIGA = 'https://masterpadel360.github.io/liga-master-padel-360/';
-  function msgAtrasado(c, p) {
-    return 'Buenas, ¿cómo están? 👋 Les escribo de la Liga Master Pádel 360.\n\n' +
-      'Tienen pendiente el partido de la *fecha ' + p.fecha + '* (' + c + '):\n*' + p.parejaA + '* vs *' + p.parejaB + '*\n\n' +
-      'Pónganse de acuerdo y resérvenlo desde la app así no se atrasa más 🎾\n' + LINK_LIGA + '\n\n¡Gracias!';
+  function telLindo(t) {
+    var d = String(t || '');
+    return d.length === 10 ? d.slice(0, 3) + ' ' + d.slice(3, 6) + ' ' + d.slice(6) : d;
   }
+  function lineaContactos(cs) {
+    return '📲 ' + (cs && cs.length ? cs.map(function (c) { return (c.nombre ? c.nombre + ' ' : '') + c.telefono; }).join(' · ') : '[sin número cargado]');
+  }
+  function msgPareja(p) {
+    var n = p.partidos.length;
+    return 'Buenas, ¿cómo están? 👋 Les escribo de la Liga Master Pádel 360.\n\n' +
+      (n === 1 ? 'Tienen pendiente este partido (' + p.categoria + '):\n' : 'Tienen *' + n + ' partidos pendientes* (' + p.categoria + '):\n') +
+      p.partidos.map(function (x) { return '• Fecha ' + x.fecha + ': vs *' + x.rival + '*\n   ' + lineaContactos(x.rivalContactos); }).join('\n') + '\n\n' +
+      (n === 1 ? 'Les dejo el contacto de sus rivales: coordinen y resérvenlo desde la app así no se atrasa más 🎾\n'
+        : 'Les dejo el contacto de cada rival: coordinen y resérvenlos desde la app así no se atrasan más 🎾\n') +
+      LINK_LIGA + '\n\n¡Gracias!';
+  }
+  function txtAviso(p, ahora) {
+    if (!p.ultimoAviso) return 'Nunca avisado';
+    var d = Math.floor((ahora - p.ultimoAviso) / 864e5);
+    return 'Avisado ' + (d <= 0 ? 'hoy' : d === 1 ? 'ayer' : 'hace ' + d + ' días') + ' · ' + p.avisos + (p.avisos === 1 ? ' aviso' : ' avisos');
+  }
+  function tarjetaDeuda(p, ahora) {
+    var ids = p.partidos.map(function (x) { return x.idPartido; }).join(',');
+    var botones = p.contactos.map(function (c) {
+      return '<a class="org-wa-btn" href="' + esc(linkWa(c.telefono, msgPareja(p))) + '" target="_blank" rel="noopener" data-org="avisar-wa" data-id="' + esc(p.idPareja) + '" data-tel="' + esc(c.telefono) + '" data-ids="' + esc(ids) + '">' +
+        'WhatsApp a ' + esc(String(c.nombre || 'jugador').split(' ')[0]) + ' <span>' + esc(telLindo(c.telefono)) + (c.origen === 'reserva' ? ' · de una reserva' : '') + '</span></a>';
+    }).join('');
+    return '<div class="org-card org-deuda' + (p.tocaAvisar ? '' : ' is-avisada') + '" data-deuda="' + esc(p.idPareja) + '">' +
+      '<div class="org-res-head"><span class="org-res-cruce">' + esc(p.nombre) + '</span><span class="org-pill">' + p.partidos.length + (p.partidos.length === 1 ? ' partido' : ' partidos') + '</span></div>' +
+      '<p class="org-muted">' + esc(p.categoria) + ' · <span class="org-deuda-aviso">' + esc(txtAviso(p, ahora)) + '</span></p>' +
+      '<div>' + p.partidos.map(function (x) {
+        return '<div class="org-atr org-atr-sin"><span class="org-atr-f">F' + x.fecha + '</span><span class="org-atr-tx"><span>vs <b>' + esc(x.rival) + '</b></span>' +
+          '<small>' + esc(lineaContactos(x.rivalContactos)) + '</small></span></div>';
+      }).join('') + '</div>' +
+      (p.contactos.length ? '<div class="org-deuda-btns">' + botones + '</div>'
+        : '<p class="rsv-error">No hay ningún teléfono de esta pareja. Cargalos para poder mandarles el WhatsApp.</p>') +
+      '<div class="org-row org-wrap">' +
+        '<button class="org-link" data-org="copiar-atrasados" data-texto="' + esc(msgPareja(p)) + '" type="button">Copiar mensaje</button>' +
+        '<button class="org-link" data-org="tel-pareja-atr" data-id="' + esc(p.idPareja) + '" type="button">' + (p.contactos.length ? 'Editar teléfonos' : 'Cargar teléfonos') + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+  var ETAPA_ATR = { aprobar: ['res', 'Reserva para aprobar'], reservado: ['ok', 'Reservado'], resultado: ['res', 'Ya jugaron · falta el resultado'] };
   function vAtrasados() {
     genVista++; var g = genVista;
-    cargarAtrasados().then(function (cats) {
-      if (g !== genVista) return;
-      // Solo los que no tienen ninguna reserva: los reservados ya están en camino.
-      var reservados = 0;
-      cats.forEach(function (c) { var t = c.partidos.length; c.partidos = c.partidos.filter(function (p) { return !p.reserva; }); reservados += t - c.partidos.length; });
-      var tot = cats.reduce(function (n, c) { return n + c.partidos.length; }, 0);
-      var texto = cats.filter(function (c) { return c.partidos.length; }).map(function (c) {
-        return '*' + c.categoria + '* (' + c.partidos.length + ')\n' + c.partidos.map(function (p) { return '• F' + p.fecha + ': ' + p.parejaA + ' vs ' + p.parejaB; }).join('\n');
-      }).join('\n\n');
+    apiVista('adminAtrasados').then(function (d) {
+      st.atrasados = d;
+      var orden = {}; d.categorias.forEach(function (c, i) { orden[c.categoria] = i; });
+      var todas = [];
+      d.categorias.forEach(function (c) { todas = todas.concat(c.parejas); });
+      todas.sort(function (a, b) { return b.partidos.length - a.partidos.length || orden[a.categoria] - orden[b.categoria] || String(a.idPareja).localeCompare(String(b.idPareja)); });
+      var toca = todas.filter(function (p) { return p.tocaAvisar; }), recientes = todas.filter(function (p) { return !p.tocaAvisar; });
+      var enCamino = d.categorias.filter(function (c) { return c.enCamino.length; });
+      var t = d.totales;
       vista().innerHTML =
         '<div class="org-stats">' +
-          '<div class="org-stat' + (tot ? ' is-alert' : '') + '"><b>' + tot + '</b><span>Atrasados sin reservar</span></div>' +
-          '<div class="org-stat"><b>' + reservados + '</b><span>Atrasados que ya reservaron (no se muestran)</span></div>' +
+          '<div class="org-stat' + (t.partidosSinReservar ? ' is-alert' : '') + '"><b>' + t.partidosSinReservar + '</b><span>Atrasados sin reservar</span></div>' +
+          '<div class="org-stat' + (t.tocaAvisar ? ' is-alert' : '') + '"><b>' + t.tocaAvisar + '</b><span>Parejas para avisar</span></div>' +
+          '<div class="org-stat"><b>' + t.enCamino + '</b><span>Ya reservaron o falta cerrar</span></div>' +
         '</div>' +
-        '<p class="org-muted">Partidos de fechas anteriores a la que está en juego que todavía no reservaron. En cada uno tenés el mensaje listo para mandarles a los jugadores.</p>' +
-        (tot ? '<button class="rsv-copy-btn" data-org="copiar-atrasados" data-texto="' + esc(texto) + '" type="button">Copiar la lista completa</button>' : '') +
-        cats.map(function (c) {
-          if (!c.partidos.length) return '<div class="org-card"><h3>' + esc(c.categoria) + '</h3><p class="org-muted">Sin atrasados por reservar 🎉</p></div>';
-          var cnt = {}; c.partidos.forEach(function (p) { [p.parejaA, p.parejaB].forEach(function (n) { cnt[n] = (cnt[n] || 0) + 1; }); });
-          var deben = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a] || a.localeCompare(b); });
-          return '<div class="org-card"><div class="org-row org-spread"><h3>' + esc(c.categoria) + '</h3><span class="org-pill">' + c.partidos.length + ' sin reservar</span></div>' +
-            c.partidos.map(function (p) { var m = msgAtrasado(c.categoria, p);
-              return '<div class="org-atr org-atr-sin"><span class="org-atr-f">F' + p.fecha + '</span><span class="org-atr-tx"><span><b>' + esc(p.parejaA) + '</b> vs <b>' + esc(p.parejaB) + '</b></span>' +
-                '<span class="org-row" style="gap:8px;margin-top:4px"><a class="rsv-copy-btn" href="https://wa.me/?text=' + encodeURIComponent(m) + '" target="_blank" rel="noopener">Mandar por WhatsApp</a>' +
-                '<button class="org-link" data-org="copiar-atrasados" data-texto="' + esc(m) + '" type="button">Copiar mensaje</button></span></span></div>'; }).join('') +
-            '<p class="org-muted org-mini" style="margin-top:8px">Deben: ' + deben.map(function (n) { return esc(n) + ' <b>' + cnt[n] + '</b>'; }).join(' · ') + '</p>' +
-          '</div>';
-        }).join('');
+        '<p class="org-muted">Partidos de fechas anteriores a la que está en juego que todavía no se reservaron. Cada pareja recibe un solo mensaje con todo lo que debe y el contacto de sus rivales. Al tocar WhatsApp queda anotado el aviso; a la semana vuelven a aparecer acá.</p>' +
+        '<h3 class="org-sec-tit">Toca avisar · ' + toca.length + '</h3>' +
+        (toca.length ? toca.map(function (p) { return tarjetaDeuda(p, d.ahora); }).join('') : '<p class="state-empty">' + (todas.length ? 'Ya les avisaste a todas esta semana 👌' : 'No hay partidos atrasados sin reservar 🎉') + '</p>') +
+        (recientes.length ? '<details class="org-mes"><summary><b>Avisados hace poco · ' + recientes.length + '</b><span class="org-muted">menos de ' + d.diasReaviso + ' días</span></summary>' +
+          recientes.map(function (p) { return tarjetaDeuda(p, d.ahora); }).join('') + '</details>' : '') +
+        (enCamino.length ? '<details class="org-mes"><summary><b>Ya reservaron o falta cerrar · ' + t.enCamino + '</b>' +
+          '<span class="org-muted">' + (t.faltaAprobar ? t.faltaAprobar + ' para aprobar · ' : '') + (t.faltaResultado ? t.faltaResultado + ' sin resultado' : '') + '</span></summary>' +
+          enCamino.map(function (c) {
+            return '<div class="org-card"><h3>' + esc(c.categoria) + '</h3>' + c.enCamino.map(function (x) {
+              var e = ETAPA_ATR[x.etapa] || ETAPA_ATR.reservado;
+              return '<div class="org-atr org-atr-' + e[0] + '"><span class="org-atr-f">F' + x.fecha + '</span><span class="org-atr-tx"><span><b>' + esc(x.parejaA) + '</b> vs <b>' + esc(x.parejaB) + '</b></span>' +
+                '<small>' + esc(e[1]) + ' · ' + esc(fechaCorta(x.reserva.fecha)) + ' ' + esc(x.reserva.horarioInicio) + '</small></span></div>';
+            }).join('') + '</div>';
+          }).join('') + '</details>' : '');
     }).catch(function (e) { if (g === genVista) errorVista(e); });
+  }
+  function buscarDeuda(id) {
+    var d = st.atrasados, r = null;
+    if (d) d.categorias.forEach(function (c) { c.parejas.forEach(function (p) { if (p.idPareja === id) r = p; }); });
+    return r;
   }
 
   // ============================================================ RESERVAS
@@ -814,6 +848,18 @@
             '<select class="org-input" id="pcat">' + opciones(ed ? ed.categoria : st.catParejas) + '</select>' +
             '<select class="org-input" id="pest"><option value="ACTIVA">Activa</option><option value="BAJA"' + (ed && ed.estado === 'BAJA' ? ' selected' : '') + '>De baja</option></select>' +
           '</div>' +
+          '<div class="org-grid2">' + [1, 2].map(function (i) {
+            var nom = ed && ed['jugador' + i] ? String(ed['jugador' + i]).split(' ')[0] : 'jugador ' + i;
+            var sug = ed && !ed['telefono' + i] ? (ed.telefonosReservas || []).filter(function (x) { return x.jugador === i; })[0] : null;
+            return '<label>Celular de ' + esc(nom) +
+              '<input class="org-input" id="ptel' + i + '" type="tel" inputmode="tel" autocomplete="off" placeholder="351 618 3879" value="' + esc(ed ? telLindo(ed['telefono' + i]) : '') + '">' +
+              (sug ? '<span class="org-tel-sug">En una reserva dejó ' + esc(telLindo(sug.telefono)) + ' <button class="org-link" data-org="usar-tel" data-campo="ptel' + i + '" data-tel="' + esc(sug.telefono) + '" type="button">Usar</button></span>' : '') +
+            '</label>';
+          }).join('') + '</div>' +
+          (ed ? (ed.telefonosReservas || []).filter(function (x) { return !x.jugador; }).map(function (x) {
+            return '<p class="org-muted org-mini">También reservó con ' + esc(telLindo(x.telefono)) + ' a nombre de "' + esc(x.nombre) + '" (no se sabe cuál de los dos es).</p>';
+          }).join('') : '') +
+          '<p class="org-muted org-mini">Característica + número, sin 0 ni 15 (se corrige solo). Se usan para avisarles por WhatsApp de los partidos atrasados.</p>' +
           '<div class="org-row">' +
             '<button class="rsv-btn-aprobar" data-org="guardar-pareja" type="button">' + (ed ? 'Guardar cambios' : 'Agregar') + '</button>' +
             (ed ? '<button class="rsv-btn-ghost" data-org="cancelar-edicion" type="button">Cancelar</button>' : '') +
@@ -825,7 +871,8 @@
           (lista.length ? lista.map(function (p) {
             return '<div class="org-pareja' + (p.estado === 'BAJA' ? ' is-baja' : '') + '">' +
               '<span class="org-muted">' + esc(p.id) + '</span>' +
-              '<span class="org-pareja-tx">' + esc(p.jugador1) + ' / ' + esc(p.jugador2) + (p.estado === 'BAJA' ? ' <em>(baja)</em>' : '') + '</span>' +
+              '<span class="org-pareja-tx">' + esc(p.jugador1) + ' / ' + esc(p.jugador2) + (p.estado === 'BAJA' ? ' <em>(baja)</em>' : '') +
+                '<small class="org-pareja-tel' + (p.telefono1 || p.telefono2 ? '' : ' is-sin') + '">' + (p.telefono1 || p.telefono2 ? '📲 ' + [p.telefono1, p.telefono2].filter(Boolean).map(telLindo).join(' · ') : 'Sin celulares cargados') + '</small></span>' +
               '<button class="org-link" data-org="editar-pareja" data-pareja=\'' + esc(JSON.stringify(p)) + '\' type="button">Editar</button>' +
               (p.estado === 'ACTIVA' ? '<button class="org-link org-danger" data-org="baja-pareja" data-id="' + esc(p.id) + '" type="button">Dar de baja</button>' : '') +
             '</div>';
@@ -1038,13 +1085,13 @@
   // ============================================================ EVENTOS
   function manejarClick(e) {
     var tab = e.target.closest('[data-org-tab]');
-    if (tab) { irTab(tab.getAttribute('data-org-tab')); return; }
+    if (tab) { st.volverAtrasados = false; irTab(tab.getAttribute('data-org-tab')); return; }
     var f = e.target.closest('[data-org-filtro]');
     if (f) { st.filtroReservas = f.getAttribute('data-org-filtro'); st.busqueda = ''; vReservas(); return; }
     var cr = e.target.closest('[data-org-catres]');
     if (cr) { st.catResultados = cr.getAttribute('data-org-catres'); vResultados(); return; }
     var cp = e.target.closest('[data-org-catpar]');
-    if (cp) { st.catParejas = cp.getAttribute('data-org-catpar'); st.editPareja = null; vParejas(); return; }
+    if (cp) { st.catParejas = cp.getAttribute('data-org-catpar'); st.editPareja = null; st.volverAtrasados = false; vParejas(); return; }
     var el = e.target.closest('[data-org]');
     if (!el) return;
     var a = el.getAttribute('data-org');
@@ -1063,7 +1110,34 @@
     'ir-atrasados': function () { irTab('atrasados'); },
     'copiar-atrasados': function (el) {
       var t = el.getAttribute('data-texto') || '';
-      try { navigator.clipboard.writeText(t).then(function () { toast('Lista copiada ✅'); }, function () { toast('No se pudo copiar', 'error'); }); } catch (e) { toast('No se pudo copiar', 'error'); }
+      try { navigator.clipboard.writeText(t).then(function () { toast('Copiado ✅'); }, function () { toast('No se pudo copiar', 'error'); }); } catch (e) { toast('No se pudo copiar', 'error'); }
+    },
+    // El link abre WhatsApp solo (no se frena); acá solo se anota el aviso.
+    'avisar-wa': function (el) {
+      var id = el.getAttribute('data-id');
+      api('adminRegistrarAviso', { idPareja: id, telefono: el.getAttribute('data-tel'), idsPartidos: (el.getAttribute('data-ids') || '').split(',').filter(Boolean) }).then(function (r) {
+        var p = buscarDeuda(id);
+        if (p) { p.avisos = r.avisos; p.mensajes = r.mensajes; p.ultimoAviso = r.ultimoAviso; p.tocaAvisar = false; }
+        var card = root.querySelector('[data-deuda="' + id + '"]');
+        if (card) {
+          card.classList.add('is-avisada');
+          var tx = card.querySelector('.org-deuda-aviso');
+          if (tx) tx.textContent = txtAviso({ ultimoAviso: r.ultimoAviso, avisos: r.avisos }, r.ultimoAviso) + ' ✅';
+        }
+        el.classList.add('is-hecho');
+      }).catch(function (e) { toast('No se pudo anotar el aviso: ' + e.message, 'error'); });
+    },
+    'tel-pareja-atr': function (el) {
+      var p = buscarDeuda(el.getAttribute('data-id'));
+      if (!p) return;
+      st.editPareja = { id: p.idPareja, categoria: p.categoria, jugador1: p.jugador1, jugador2: p.jugador2, estado: 'ACTIVA', telefono1: p.telefono1, telefono2: p.telefono2, telefonosReservas: p.telefonosReservas };
+      st.catParejas = p.categoria; st.volverAtrasados = true;
+      irTab('parejas'); window.scrollTo(0, 0);
+    },
+    'usar-tel': function (el) {
+      var i = $('#' + el.getAttribute('data-campo'));
+      if (i) { i.value = telLindo(el.getAttribute('data-tel')); i.focus(); }
+      var sug = el.closest('.org-tel-sug'); if (sug) sug.remove();
     },
     'ir-pendientes': function () { st.filtroReservas = 'pendientes'; irTab('reservas'); },
     'ir-proximas': function () { st.filtroReservas = 'proximas'; irTab('reservas'); },
@@ -1105,10 +1179,11 @@
         return api('adminPartidos', { categoria: st.catResultados }).then(pintarPartidos);
       }).catch(function () {});
     },
-    'editar-pareja': function (el) { st.editPareja = JSON.parse(el.getAttribute('data-pareja')); vParejas(); window.scrollTo(0, 0); },
-    'cancelar-edicion': function () { st.editPareja = null; vParejas(); },
+    'editar-pareja': function (el) { st.editPareja = JSON.parse(el.getAttribute('data-pareja')); st.volverAtrasados = false; vParejas(); window.scrollTo(0, 0); },
+    'cancelar-edicion': function () { st.editPareja = null; if (st.volverAtrasados) { st.volverAtrasados = false; irTab('atrasados'); return; } vParejas(); },
     'guardar-pareja': function (el) {
-      var datos = { categoria: $('#pcat').value, jugador1: $('#pj1').value, jugador2: $('#pj2').value, estado: $('#pest').value };
+      var datos = { categoria: $('#pcat').value, jugador1: $('#pj1').value, jugador2: $('#pj2').value, estado: $('#pest').value,
+        telefono1: $('#ptel1').value, telefono2: $('#ptel2').value };
       if (st.editPareja) datos.id = st.editPareja.id;
       // Pasar de activa a "De baja": primero se guardan los otros cambios y
       // después se da de baja con W.O. (mostrando antes qué va a pasar).
@@ -1119,7 +1194,12 @@
       }
       var reactivar = st.editPareja && st.editPareja.estado === 'BAJA' && datos.estado === 'ACTIVA';
       if (reactivar && !confirm('¿Volver a activar esta pareja?\n\nLos partidos que se le habían dado por W.O. a sus rivales vuelven a quedar pendientes (sin resultado).')) return;
-      conBoton(el, api('adminGuardarPareja', datos), st.editPareja ? 'Pareja actualizada' : 'Pareja agregada').then(function () { st.editPareja = null; st.resumen = null; st.fixFechas = null; vParejas(); }).catch(function () {});
+      conBoton(el, api('adminGuardarPareja', datos), st.editPareja ? 'Pareja actualizada' : 'Pareja agregada').then(function (r) {
+        if (r && r.advertencias && r.advertencias.length) toast(r.advertencias.join(' '), 'error');
+        st.editPareja = null; st.resumen = null; st.fixFechas = null;
+        if (st.volverAtrasados) { st.volverAtrasados = false; irTab('atrasados'); return; }
+        vParejas();
+      }).catch(function () {});
     },
     'baja-pareja': function (el) { darDeBajaConWo(el, el.getAttribute('data-id')); },
     'generar-fixture': function (el) {

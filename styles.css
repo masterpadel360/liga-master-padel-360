@@ -371,6 +371,18 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   padding:3px 10px;border-radius:999px;background:var(--warn-bg);color:var(--warn);
 }
 .match-pair{display:flex;align-items:center;gap:10px}
+/* Partido atrasado (de una fecha anterior a la que está en juego, sin reservar) */
+.match-card.is-atrasado{border-color:rgba(255,182,72,.45)}
+.match-pending-tag.is-atrasado{background:var(--warn);color:#2a1500}
+.chip.has-atrasado:not(.active){border-color:rgba(255,182,72,.55);color:var(--warn)}
+.fix-atr-aviso{
+  display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;
+  background:var(--warn-bg);border:1px solid rgba(255,182,72,.35);border-radius:var(--radius-md);padding:12px 14px;font-size:.82rem;
+}
+.fix-atr-aviso b{color:var(--warn)}
+.fix-atr-aviso > span{display:flex;flex-wrap:wrap;gap:6px}
+.fix-atr-fecha{padding:4px 10px;border-radius:999px;border:1px solid rgba(255,182,72,.5);color:var(--warn);font-size:.74rem;font-weight:800;background:none}
+.fix-atr-aviso .fix-atr-tx{color:var(--text-dim);line-height:1.4}
 .avatar{
   width:28px;height:28px;border-radius:50%;background:var(--surface-strong);border:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;font-size:.64rem;font-weight:800;

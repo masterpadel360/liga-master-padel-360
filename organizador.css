@@ -230,3 +230,25 @@ select.org-input{appearance:auto}
 .org-atr-ok .org-atr-tx small{color:#9fe0b0}
 .org-atr-res .org-atr-tx small{color:var(--gold)}
 .org-atr-sin .org-atr-tx small{color:var(--warn)}
+
+/* Atrasados por pareja: un WhatsApp por pareja con todo lo que debe */
+.org-sec-tit{margin:6px 0 -2px;font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--gold)}
+.org-deuda{gap:8px}
+.org-deuda .org-res-head .org-pill{background:var(--warn-bg);color:var(--warn);flex-shrink:0}
+.org-deuda .org-atr{padding:7px 0}
+.org-deuda .org-atr-tx small{color:var(--text-dim);font-size:.74rem;word-break:break-word}
+.org-deuda.is-avisada .org-res-head .org-pill{background:var(--surface-strong);color:var(--text-dim)}
+.org-deuda-aviso{font-weight:700;color:var(--warn)}
+.org-deuda.is-avisada .org-deuda-aviso{color:#9fe0b0}
+.org-deuda-btns{display:flex;flex-direction:column;gap:7px}
+.org-wa-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-radius:999px;font-size:.8rem;font-weight:800;background:rgba(120,200,140,.18);color:#9fe0b0;border:1px solid rgba(120,200,140,.5);text-decoration:none}
+.org-wa-btn span{font-weight:600;font-size:.74rem;opacity:.85;white-space:nowrap}
+.org-wa-btn:active{transform:scale(.98)}
+.org-wa-btn.is-hecho{background:var(--surface-strong);color:var(--text-dim);border-color:var(--border-strong)}
+.org-mes .org-card{margin-bottom:10px}
+.org-mes .org-deuda{background:var(--bg-soft)}
+.org-mes > summary b{font-size:.9rem}
+.org-tel-sug{display:flex;align-items:center;gap:4px;flex-wrap:wrap;text-transform:none;letter-spacing:0;font-weight:600;color:var(--gold-light);font-size:.72rem}
+.org-tel-sug .org-link{padding:2px 4px}
+.org-pareja-tx small{display:block;font-size:.72rem;color:var(--text-dim);margin-top:2px}
+.org-pareja-tel.is-sin{color:var(--warn)}

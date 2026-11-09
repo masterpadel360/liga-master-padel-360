@@ -697,16 +697,26 @@ function renderFixture_(datos) {
     fechaPorCategoria[categoriaActual] = datos.fechas[datos.fechas.length - 1].numero;
   }
   var sel = fechaPorCategoria[categoriaActual];
+  // Partidos atrasados: de fechas anteriores a la que está en juego, sin resultado y sin reserva.
+  var atrasadas = datos.fechas.map(function (f) {
+    return { numero: f.numero, n: f.partidos.filter(function (p) { return p.atrasado; }).length };
+  }).filter(function (x) { return x.n; });
+  var totalAtr = atrasadas.reduce(function (t, x) { return t + x.n; }, 0);
   contFechas.innerHTML = datos.fechas.map(function (f) {
-    return '<button class="chip' + (f.numero === sel ? ' active' : '') + '" data-fecha="' + f.numero + '">Fecha ' + f.numero + '</button>';
+    var atr = atrasadas.some(function (x) { return x.numero === f.numero; });
+    return '<button class="chip' + (f.numero === sel ? ' active' : '') + (atr ? ' has-atrasado' : '') + '" data-fecha="' + f.numero + '">Fecha ' + f.numero + '</button>';
   }).join('');
   var fecha = datos.fechas.filter(function (f) { return f.numero === sel; })[0] || datos.fechas[0];
   // Nota: acá NO se muestran horario ni cancha porque PARTIDOS no trae
   // esos datos hoy. Apenas existan en la planilla, se agregan sin tocar
   // el resto de la tarjeta.
-  var html = fecha.partidos.map(function (p) {
+  var html = totalAtr ? '<div class="fix-atr-aviso"><b>' + (totalAtr === 1 ? '1 partido atrasado sin reservar' : totalAtr + ' partidos atrasados sin reservar') + '</b>' +
+    '<span>' + atrasadas.map(function (x) { return '<button type="button" class="fix-atr-fecha" data-fecha="' + x.numero + '">Fecha ' + x.numero + '</button>'; }).join('') + '</span>' +
+    '<span class="fix-atr-tx">Si es tuyo, coordiná con tu rival y reservalo así no se atrasa más.</span>' +
+    '<button type="button" class="chip active" data-go="reservar">Reservar turno</button></div>' : '';
+  html += fecha.partidos.map(function (p) {
     if (p.estado === 'JUGADO') return renderTarjetaJugada_(p);
-    return '<div class="match-card"><span class="match-pending-tag">Pendiente</span>' +
+    return '<div class="match-card' + (p.atrasado ? ' is-atrasado' : '') + '">' + (p.atrasado ? '<span class="match-pending-tag is-atrasado">Atrasado · sin reservar</span>' : '<span class="match-pending-tag">Pendiente</span>') +
       '<div class="match-pair"><span class="avatar">' + iniciales_(p.parejaA) + '</span><span class="nm">' + esc_(p.parejaA) + '</span></div>' +
       '<div class="vs-div">VS</div>' +
       '<div class="match-pair"><span class="avatar">' + iniciales_(p.parejaB) + '</span><span class="nm">' + esc_(p.parejaB) + '</span></div>' +
