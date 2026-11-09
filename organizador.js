@@ -857,6 +857,7 @@
     return max;
   }
   function libresPorClases(dia, ini, fin) {
+    if (fin === '00:00') fin = '24:00'; // turno que termina a la medianoche
     if (!ini || !fin || fin <= ini) return null;
     var clasesDia = (st.clases || []).filter(function (k) { return Number(k.dia) === Number(dia); });
     return Math.max(0, (st.cantidadCanchas || 3) - clasesSimultaneas(clasesDia, ini, fin));

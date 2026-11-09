@@ -198,6 +198,11 @@ const todas = g.dias.flatMap((d) => d.franjas.map((f) => ({ dia: d.dia, ...f }))
 todas.push({ dia: 0, inicio: '10:00', fin: '11:30', canchas: 3 });
 await ok('adminGuardarGrilla', A({ franjas: todas }));
 check((await ok('adminGrilla', A())).dias[6].franjas.length === 1, 'agregar turno de domingo');
+// El celu manda la medianoche como "00:00": tiene que guardarse y quedar guardado.
+const conMedianoche = todas.filter((f) => f.inicio !== '22:30').concat([1, 2, 3, 4, 5].map((dia) => ({ dia, inicio: '22:30', fin: '00:00', canchas: 3 })));
+await ok('adminGuardarGrilla', A({ franjas: conMedianoche }));
+const gMed = await ok('adminGrilla', A());
+check([0, 1, 2, 3, 4].every((i) => gMed.dias[i].franjas.some((f) => f.inicio === '22:30' && f.fin === '24:00' && f.canchas === 3)), 'turno 22:30 a 00:00 de lunes a viernes queda guardado', gMed.dias[0]);
 const cfg = await ok('adminGuardarConfig', A({ valores: { valor_turno: 40000, monto_sena: '10000', hackeo: 'x' } }));
 check(cfg.valorTurno === 40000 && cfg.montoSena === 10000, 'ajustes de precio', cfg);
 await ok('adminGuardarContenido', A({ tipo: 'NOVEDAD', titulo: 'Fecha 5', texto: 'Arranca el lunes', orden: 0 }));

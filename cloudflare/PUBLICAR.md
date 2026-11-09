@@ -5,7 +5,7 @@ Todo se hace desde el navegador, sin instalar nada. Mientras no se haga el
 vieja con la planilla, así que se puede hacer con calma.
 
 ## 1. Subir el servidor (Worker)
-1. Abrí https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/migracion-cloudflare/cloudflare/worker.js
+1. Abrí https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/main/cloudflare/worker.js
    → Ctrl+A → Ctrl+C (copiar todo).
 2. Cloudflare → **Workers & Pages** → **liga-360-api** → botón **Edit code**.
 3. Borrá todo lo que haya en el editor, pegá (Ctrl+V) y tocá **Deploy**.
@@ -32,14 +32,14 @@ que volver a escribirla.
 2. Primero mirá si ya hay tablas: `SELECT name FROM sqlite_master WHERE type='table';`
    - Si aparecen tablas de una prueba anterior (la base todavía no se usa
      en producción), borralas con `DROP TABLE nombre;` una por una.
-3. Abrí https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/migracion-cloudflare/cloudflare/schema.sql,
+3. Abrí https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/main/cloudflare/schema.sql,
    copiá todo, pegalo en la consola y **Execute**.
 
 ## 5. Pasar los datos de la planilla
 1. Abrí la planilla **Organizacion LIGA OFICIAL** → **Extensiones** → **Apps Script**.
 2. Al lado de "Archivos", **+** → **Secuencia de comandos** → nombre `ExportarACloudflare`.
 3. Pegá el contenido de
-   https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/migracion-cloudflare/cloudflare/ExportarACloudflare.gs
+   https://raw.githubusercontent.com/masterpadel360/liga-master-padel-360/main/cloudflare/ExportarACloudflare.gs
 4. Arriba de todo completá `EXP360_URL_WORKER` (la dirección de tu Worker,
    por ejemplo `https://liga-360-api.tu-usuario.workers.dev`) y
    `EXP360_CLAVE_ORGANIZADOR` (la `CLAVE_ADMIN` del paso 3). Guardá (Ctrl+S).

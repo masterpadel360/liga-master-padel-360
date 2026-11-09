@@ -1163,7 +1163,7 @@ function reservarRenderDias_(datos) {
   cont.innerHTML = dias.map(function (d) {
     var franjas = (d.franjas || []).map(function (f) {
       return '<button class="rsv-turno-btn" data-rsv-fecha="' + esc_(d.fecha) + '" data-rsv-inicio="' + esc_(f.inicio) + '" data-rsv-fin="' + esc_(f.fin) + '">' +
-        '<span class="rsv-turno-hora">' + esc_(f.inicio) + ' - ' + esc_(f.fin) + '</span>' +
+        '<span class="rsv-turno-hora">' + esc_(f.inicio) + ' - ' + esc_(f.fin === '24:00' ? '00:00' : f.fin) + '</span>' +
         '<span class="rsv-turno-cupo">' + f.disponibles + (f.disponibles === 1 ? ' turno disponible' : ' turnos disponibles') + '</span>' +
       '</button>';
     }).join('');
