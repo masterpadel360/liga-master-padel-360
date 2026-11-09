@@ -18,9 +18,21 @@ CREATE TABLE IF NOT EXISTS parejas (
   categoria  TEXT NOT NULL,
   jugador1   TEXT NOT NULL,
   jugador2   TEXT NOT NULL DEFAULT '',
-  estado     TEXT NOT NULL DEFAULT 'ACTIVA'   -- ACTIVA | BAJA
+  estado     TEXT NOT NULL DEFAULT 'ACTIVA',  -- ACTIVA | BAJA
+  telefono1  TEXT NOT NULL DEFAULT '',        -- celular del jugador 1, 10 dígitos (3516183879)
+  telefono2  TEXT NOT NULL DEFAULT ''         -- celular del jugador 2
 );
 CREATE INDEX IF NOT EXISTS idx_parejas_cat ON parejas(categoria, estado);
+
+-- WhatsApp que el organizador le mandó a una pareja con partidos atrasados.
+CREATE TABLE IF NOT EXISTS avisos_atrasados (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  pareja_id  TEXT NOT NULL,
+  telefono   TEXT NOT NULL DEFAULT '',
+  ts         INTEGER NOT NULL,                -- milisegundos epoch
+  partidos   TEXT NOT NULL DEFAULT '[]'       -- JSON con los id de partido que debía
+);
+CREATE INDEX IF NOT EXISTS idx_avisos_pareja ON avisos_atrasados(pareja_id, ts);
 
 CREATE TABLE IF NOT EXISTS partidos (
   id           TEXT PRIMARY KEY,     -- PT0001...

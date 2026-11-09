@@ -391,6 +391,151 @@ console.log('14) Dar de baja con W.O.');
   check(re.find((x) => x.idPartido === jugadoAntes.idPartido).estado === 'JUGADO', 'al reactivar, lo jugado queda');
 }
 
+console.log('15) Teléfonos de las parejas y avisos de atrasados (base vieja que se pone al día sola)');
+{
+  // Base como la de producción antes de esta versión: sin teléfonos ni tabla de avisos.
+  const DB2 = crearD1(path.join(aqui, '..', 'schema.sql'));
+  DB2._raw.exec('DROP TABLE avisos_atrasados; ALTER TABLE parejas DROP COLUMN telefono1; ALTER TABLE parejas DROP COLUMN telefono2;');
+  const w2 = (await import('../worker.js?migracion')).default; // instancia nueva: vuelve a correr asegurarEsquema
+  const env2 = { ...env, DB: DB2 };
+  const api2 = async (accion, datos = {}) => {
+    const r = await w2.fetch(new Request('https://api.test/?accion=' + accion, { method: 'POST', body: JSON.stringify(datos) }), env2, ctx);
+    return r.json();
+  };
+  const ok2 = async (accion, datos) => { const r = await api2(accion, datos); if (!r.ok) { fallas++; console.log('  ✗ ' + accion + ' devolvió error: ' + r.error); return null; } oks++; return r.data; };
+  const t2 = (await ok2('adminLogin', { clave: 'clave-orga' })).tokenAdmin;
+  const B = (d = {}) => ({ tokenAdmin: t2, ...d });
+  await ok2('importar', B({ datos: datosImport, forzar: true }));
+  const cols = DB2._raw.prepare("SELECT name FROM pragma_table_info('parejas')").all().map((x) => x.name);
+  check(cols.includes('telefono1') && cols.includes('telefono2'), 'migración: parejas tiene telefono1/telefono2', cols);
+  check(!!DB2._raw.prepare("SELECT 1 FROM sqlite_master WHERE name = 'avisos_atrasados'").get(), 'migración: tabla avisos_atrasados creada');
+
+  const idDe = (t) => String(t).split(' · ')[0];
+  const deuda = pend[0]; // 6ta, fecha 3: tiene una reserva RECHAZADA → sigue debiéndose
+  const X = idDe(deuda.parejaA), Xr = idDe(deuda.parejaB);
+  const parejaDe = async (id) => (await ok2('adminParejas', B())).parejas.find((p) => p.id === id);
+  const px = await parejaDe(X);
+  check(px.telefono1 === '' && px.telefono2 === '' && Array.isArray(px.telefonosReservas), 'adminParejas devuelve teléfonos vacíos al principio', px);
+
+  // Guardar con teléfonos (se normalizan a 10 dígitos)
+  const g1 = await ok2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px.jugador1, jugador2: px.jugador2, estado: 'ACTIVA', telefono1: '+54 9 351 618-3879', telefono2: '0351 15 241-7105' }));
+  check(g1.telefono1 === '3516183879' && g1.telefono2 === '3512417105' && g1.advertencias.length === 0, 'guardarPareja normaliza +54 9 y 0351 15', g1);
+  // Guardar SIN teléfonos (pantalla vieja / corregir nombre) no los borra
+  await ok2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px.jugador1 + ' Corregido', jugador2: px.jugador2, estado: 'ACTIVA' }));
+  const px2 = await parejaDe(X);
+  check(px2.jugador1.endsWith('Corregido') && px2.telefono1 === '3516183879' && px2.telefono2 === '3512417105', 'guardarPareja sin teléfonos conserva los que estaban', px2);
+  // '' borra solo ese; null lo deja
+  await ok2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px2.jugador1, jugador2: px.jugador2, estado: 'ACTIVA', telefono1: null, telefono2: '' }));
+  const px3 = await parejaDe(X);
+  check(px3.telefono1 === '3516183879' && px3.telefono2 === '', 'telefono2 vacío lo borra, telefono1 null lo deja', px3);
+  // Validación suave: número corto se guarda con advertencia; texto sin números falla
+  const gCorto = await ok2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px2.jugador1, jugador2: px.jugador2, estado: 'ACTIVA', telefono2: '12345' }));
+  check(gCorto.telefono2 === '12345' && gCorto.advertencias.length === 1, 'número corto: se guarda con advertencia', gCorto);
+  check((await api2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px2.jugador1, jugador2: px.jugador2, estado: 'ACTIVA', telefono2: 'no tiene' }))).ok === false, 'texto sin números no se acepta como teléfono');
+  await ok2('adminGuardarPareja', B({ id: X, categoria: px.categoria, jugador1: px2.jugador1, jugador2: px.jugador2, estado: 'ACTIVA', telefono2: '351 241 7105' }));
+  // Pareja nueva con teléfono
+  const nueva = await ok2('adminGuardarPareja', B({ categoria: px.categoria, jugador1: 'Nuevo Tel', jugador2: 'Otro', telefono1: '3516000000' }));
+  check(nueva.telefono1 === '3516000000' && nueva.telefono2 === '', 'pareja nueva con teléfono', nueva);
+  await ok2('adminGuardarPareja', B({ id: nueva.id, categoria: px.categoria, jugador1: 'Nuevo Tel', jugador2: 'Otro', estado: 'BAJA' }));
+
+  // Carga en bloque
+  check((await api2('adminGuardarTelefonos', B({ telefonos: [] }))).ok === false, 'bloque vacío da error');
+  const parejas6 = (await ok2('adminParejas', B())).parejas.filter((p) => p.categoria === px.categoria && p.estado === 'ACTIVA' && p.id !== X);
+  const [Y, Z] = [parejas6[0].id, parejas6[1].id];
+  const bl = await ok2('adminGuardarTelefonos', B({ telefonos: [
+    { idPareja: Y, telefono1: '3543 15 123456', telefono2: '11 15 2345-6789' },
+    { idPareja: Z, telefono1: '15 6183870' },
+    { idPareja: 'P999', telefono1: '3511111111' },
+    { idPareja: X, telefono2: null },
+    { id: Xr, telefono1: '5493516180000', telefono2: '549351618' },
+  ] }));
+  const porId = Object.fromEntries((bl ? bl.parejas : []).map((p) => [p.idPareja, p]));
+  check(bl.actualizadas === 3 && bl.noEncontradas.length === 1 && bl.noEncontradas[0] === 'P999', 'bloque: 3 actualizadas, P999 no encontrada', bl);
+  check(porId[Y] && porId[Y].telefono1 === '3543123456' && porId[Y].telefono2 === '1123456789', 'bloque: saca el 15 (3543 y 11)', porId[Y]);
+  check(porId[Z] && porId[Z].telefono1 === '3516183870' && porId[Z].telefono2 === '', 'bloque: 15 sin característica → Córdoba 351; telefono2 no tocado', porId[Z]);
+  check(porId[Xr] && porId[Xr].telefono1 === '3516180000' && bl.advertencias.length === 1 && bl.advertencias[0].startsWith(Xr), 'bloque: 549… normalizado y advertencia por número corto', bl);
+  check(!porId[X] && (await parejaDe(X)).telefono2 === '3512417105', 'bloque: fila sin cambios no toca nada');
+  check((await api2('adminGuardarTelefonos', B({ telefonos: [{ idPareja: Y, telefono1: 'abc' }] }))).ok === false && (await parejaDe(Y)).telefono1 === '3543123456', 'bloque con un teléfono inválido no cambia nada');
+
+  // Atrasados agrupados por pareja
+  let at = await ok2('adminAtrasados', B());
+  const cat6 = at.categorias.find((k) => k.categoria === deuda.categoria);
+  check(cat6.fechaEnJuego === 4 && cat6.partidosSinReservar === 1, '6ta: 1 atrasado sin reservar (la reserva rechazada no cuenta)', cat6);
+  check(cat6.parejas.length === 2 && cat6.parejas.every((p) => p.partidos.length === 1 && p.partidos[0].idPartido === deuda.id), '6ta: deben las 2 parejas de ese partido', cat6.parejas);
+  check(cat6.enCamino.length === 2 && cat6.enCamino.some((x) => x.idPartido === pend[1].id && x.etapa === 'reservado') && cat6.enCamino.some((x) => x.idPartido === pend[2].id && x.etapa === 'aprobar'), '6ta: reservado y para aprobar van aparte', cat6.enCamino);
+  const fx = cat6.parejas.find((p) => p.idPareja === X), fxr = cat6.parejas.find((p) => p.idPareja === Xr);
+  check(fx.telefono1 === '3516183879' && fx.contactos.length === 2 && fx.avisos === 0 && fx.ultimoAviso === null && fx.tocaAvisar === true, 'ficha de pareja: teléfonos, contactos, nunca avisada', fx);
+  check(fxr.partidos[0].rivalId === X && fxr.partidos[0].rivalContactos.map((c) => c.telefono).join(',') === '3516183879,3512417105', 'el rival trae los contactos de la otra pareja', fxr.partidos[0]);
+  check(at.totales.partidosSinReservar === at.categorias.reduce((n, k) => n + k.partidosSinReservar, 0) && at.totales.enCamino === 2 && at.totales.faltaAprobar === 1 && at.totales.reservados === 1, 'totales', at.totales);
+  check(at.totales.tocaAvisar === at.totales.parejasDeben, 'al principio todas están para avisar', at.totales);
+
+  // Más de un partido debido y orden por cantidad
+  await ok2('adminFechaEnJuego', B({ categoria: '8va Masculino', fecha: 5 }));
+  const pts8 = (await ok2('adminPartidos', B({ categoria: '8va Masculino' }))).partidos;
+  const f3 = pts8.find((p) => p.fecha === 3);
+  await ok2('adminGuardarResultado', B({ idPartido: f3.idPartido, set1: '6-1', set2: '6-1' }));
+  const cat8 = (await ok2('adminAtrasados', B())).categorias.find((k) => k.categoria === '8va Masculino');
+  const cant = cat8.parejas.map((p) => p.partidos.length);
+  check(cat8.parejas.length === 6 && cant.join(',') === '2,2,2,2,1,1', '8va M: ordenadas por partidos que deben', cant);
+  check(cat8.parejas[0].partidos.every((x, i, a) => !i || a[i - 1].fecha <= x.fecha), 'partidos de la pareja en orden de fecha');
+
+  // Pareja de baja: no aparece ni se le reclama a sus rivales
+  const cat7 = at.categorias.find((k) => k.categoria === '7ma Masculino');
+  const baja = cat7.parejas[0];
+  await ok2('adminGuardarPareja', B({ id: baja.idPareja, categoria: '7ma Masculino', jugador1: baja.jugador1, jugador2: baja.jugador2, estado: 'BAJA' }));
+  const cat7b = (await ok2('adminAtrasados', B())).categorias.find((k) => k.categoria === '7ma Masculino');
+  check(!cat7b.parejas.some((p) => p.idPareja === baja.idPareja || p.partidos.some((x) => x.rivalId === baja.idPareja)), 'pareja de baja excluida (y sus partidos)', cat7b.parejas);
+  check(cat7b.partidosSinReservar === cat7.partidosSinReservar - 1, 'baja: un atrasado menos', [cat7.partidosSinReservar, cat7b.partidosSinReservar]);
+  check(!cat8.parejas.some((p) => p.idPareja === nueva.id), 'pareja nueva de baja no figura');
+
+  // Teléfono sacado de las reservas cuando falta el de la pareja
+  const cat7ma = at.categorias.find((k) => k.categoria === '7ma Masculino');
+  const W = cat7ma.parejas.find((p) => p.idPareja !== baja.idPareja && !p.partidos.some((x) => x.rivalId === baja.idPareja));
+  // Nombres reales (los de prueba 'JugNa' se parecen todos entre sí)
+  await ok2('adminGuardarPareja', B({ id: W.idPareja, categoria: '7ma Masculino', jugador1: 'Martín Gómez', jugador2: 'Pablo Ríos', estado: 'ACTIVA' }));
+  const jugW = (await ok2('adminPartidos', B({ categoria: '7ma Masculino' }))).partidos.find((p) => p.estado === 'JUGADO' && (p.parejaAId === W.idPareja || p.parejaBId === W.idPareja));
+  await DB2.prepare(`INSERT INTO reservas (id, token, codigo, fecha, hora_inicio, hora_fin, cancha, categoria, id_partido, id_pareja_a, id_pareja_b, nombre, telefono, creada_ts, aprobada_ts)
+    VALUES ('R-TEL', 'tok-tel', 'CODTEL', ?, '18:00', '19:30', 1, '7ma Masculino', ?, ?, ?, ?, '351-555-1234', 5, 5)`).bind(masDias(-30), jugW.idPartido, jugW.parejaAId, jugW.parejaBId, 'pablo rios').run();
+  let fw = (await ok2('adminAtrasados', B())).categorias.find((k) => k.categoria === '7ma Masculino').parejas.find((p) => p.idPareja === W.idPareja);
+  check(fw.telefono2 === '' && fw.telefonosReservas.length === 1 && fw.telefonosReservas[0].jugador === 2 && fw.telefonosReservas[0].telefono === '3515551234', 'teléfono de la reserva como respaldo (jugador 2)', fw);
+  check(fw.contactos.some((c) => c.telefono === '3515551234' && c.origen === 'reserva'), 'el respaldo entra en los contactos para el mensaje', fw.contactos);
+  check((await parejaDe(W.idPareja)).telefono2 === '', 'el teléfono de la reserva no se guarda solo en la pareja');
+  await ok2('adminGuardarTelefonos', B({ telefonos: [{ idPareja: W.idPareja, telefono2: '3517777777' }] }));
+  fw = (await ok2('adminAtrasados', B())).categorias.find((k) => k.categoria === '7ma Masculino').parejas.find((p) => p.idPareja === W.idPareja);
+  check(fw.telefonosReservas.length === 0 && fw.contactos.length === 1 && fw.contactos[0].telefono === '3517777777', 'con teléfono cargado ya no usa el de la reserva', fw);
+
+  // Registro de avisos
+  check((await api2('adminRegistrarAviso', B({ idPareja: 'P999', telefono: '3511111111' }))).ok === false, 'aviso a pareja inexistente falla');
+  const av1 = await ok2('adminRegistrarAviso', B({ idPareja: X, telefono: '3516183879', idsPartidos: [deuda.id] }));
+  check(av1.registrado && av1.avisos === 1 && av1.mensajes === 1 && av1.ultimoAviso > 0, 'aviso registrado', av1);
+  const av2 = await ok2('adminRegistrarAviso', B({ idPareja: X, telefono: '351 618 3879', idsPartidos: [deuda.id] }));
+  check(!av2.registrado && av2.mensajes === 1, 'doble toque al mismo número no cuenta dos veces', av2);
+  const av3 = await ok2('adminRegistrarAviso', B({ idPareja: X, telefono: '3512417105', idsPartidos: [deuda.id] }));
+  check(av3.registrado && av3.mensajes === 2 && av3.avisos === 1, 'al otro jugador el mismo día: 2 mensajes, 1 aviso', av3);
+  // Xr avisada hace 8 días: le vuelve a tocar
+  DB2._raw.prepare('INSERT INTO avisos_atrasados (pareja_id, telefono, ts, partidos) VALUES (?, ?, ?, ?)').run(Xr, '3516180000', Date.now() - 8 * 864e5, '[]');
+  at = await ok2('adminAtrasados', B());
+  const c6 = at.categorias.find((k) => k.categoria === deuda.categoria);
+  const ax = c6.parejas.find((p) => p.idPareja === X), axr = c6.parejas.find((p) => p.idPareja === Xr);
+  check(ax.avisos === 1 && ax.mensajes === 2 && ax.ultimoAviso === av3.ultimoAviso && ax.tocaAvisar === false, 'recién avisada: no toca avisar', ax);
+  check(axr.avisos === 1 && axr.tocaAvisar === true && Date.now() - axr.ultimoAviso > 7 * 864e5, 'avisada hace 8 días: toca avisar de nuevo', axr);
+  check(at.totales.tocaAvisar === at.totales.parejasDeben - 1, 'totales: una menos para avisar', at.totales);
+  const row = DB2._raw.prepare('SELECT * FROM avisos_atrasados WHERE pareja_id = ? ORDER BY id LIMIT 1').get(X);
+  check(row.telefono === '3516183879' && JSON.parse(row.partidos)[0] === deuda.id, 'el aviso guarda teléfono y partidos', row);
+
+  // Fixture público: marca de atrasado
+  const fx6 = await w2.fetch(new Request('https://api.test/?accion=fixture&categoria=' + encodeURIComponent(deuda.categoria)), env2, ctx).then((r) => r.json());
+  const f3p = fx6.data.fechas.find((f) => f.numero === 3).partidos;
+  check(f3p.find((p) => p.idPartido === deuda.id).atrasado === true, 'fixture: atrasado sin reservar marcado');
+  check(f3p.find((p) => p.idPartido === pend[1].id).atrasado === false && f3p.find((p) => p.idPartido === pend[2].id).atrasado === false, 'fixture: atrasado con reserva no se marca');
+  check(fx6.data.fechas.find((f) => f.numero === 4).partidos.every((p) => p.atrasado === false) && fx6.data.fechas[0].partidos.every((p) => p.atrasado === false), 'fixture: fecha en juego y jugados no se marcan');
+
+  // Reimportar la planilla no borra los teléfonos
+  await ok2('importar', B({ datos: datosImport, forzar: true }));
+  const tras = await parejaDe(X);
+  check(tras.telefono1 === '3516183879' && tras.telefono2 === '3512417105', 'reimportar conserva los teléfonos', tras);
+}
+
 console.log('11) Publicar: reiniciar todo como está en la planilla');
 const antesG = await ok('adminGrilla', A());
 check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');

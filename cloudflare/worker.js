@@ -50,6 +50,7 @@ const MAX_ARCHIVO_BYTES = 1900000; // D1 admite filas de hasta 2 MB
 const MIMES_COMPROBANTE = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MIMES_PUBLICOS = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
 const ADMIN_TOKEN_DIAS = 30;
+const DIAS_REAVISO = 7; // a una pareja con partidos atrasados se le vuelve a avisar después de una semana
 const CONFIG_EDITABLE = ['valor_turno', 'monto_sena', 'alias', 'ventana_dias', 'retencion_minutos', 'cantidad_canchas', 'fecha_inicio_liga', 'playoffs_mensaje'];
 
 // ---------------------------------------------------------------------
@@ -426,10 +427,15 @@ async function aPosiciones(c) {
 }
 async function aFixture(c) {
   const cat = txt(c.datos.categoria);
-  const [{ filas, mapa }, partidos] = await Promise.all([
+  const [{ filas, mapa }, partidos, categoria, reservados] = await Promise.all([
     mapaParejas(c.db, cat),
     todos(c.db, 'SELECT * FROM partidos WHERE categoria = ? ORDER BY fecha, id', cat),
+    uno(c.db, 'SELECT fecha_en_juego FROM categorias WHERE nombre = ?', cat),
+    todos(c.db, `SELECT DISTINCT id_partido FROM reservas WHERE categoria = ? AND ${ACTIVA_SQL}`, cat),
   ]);
+  // Atrasado = de una fecha anterior a la que está en juego, sin resultado y sin reserva.
+  const fej = categoria && categoria.fecha_en_juego ? Number(categoria.fecha_en_juego) : 0;
+  const conReserva = new Set(reservados.map((r) => r.id_partido));
   const activas = filas.filter((p) => p.estado === 'ACTIVA');
   const porFecha = new Map();
   for (const p of partidos) {
@@ -448,6 +454,7 @@ async function aFixture(c) {
         sets: [p.set1, p.set2, p.set3].filter(Boolean),
         ganador: p.ganador_id === p.pareja_a_id ? parejaA : p.ganador_id === p.pareja_b_id ? parejaB : '',
         estado: p.estado, wo: !!p.wo,
+        atrasado: !!fej && p.fecha < fej && p.estado !== JUGADO && !conReserva.has(p.id),
       };
     });
     fechas.push({ numero, partidos: items, libres: activas.filter((p) => !juegan.has(p.id)).map(nombrePareja) });
@@ -1104,15 +1111,97 @@ async function aAdminFechaEnJuegoTodas(c) {
   await ejecutar(c.db, 'UPDATE categorias SET fecha_en_juego = ?', v);
   return { fechaEnJuego: v };
 }
+// ---------- Teléfonos de las parejas ----------
+// Deja el número en formato local de 10 dígitos (característica + número, sin 0 ni 15):
+//   "+54 9 351 618-3879", "0351 15 618-3879", "351 6183879" → "3516183879".
+// Validación suave: si no quedan 10 dígitos igual se guarda, con una advertencia.
+function normalizarTelefono(v) {
+  let d = soloDigitos(v);
+  if (!d) return { tel: '', valido: true };
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('54') && d.length >= 12) { d = d.slice(2); if (d.startsWith('9') && d.length >= 11) d = d.slice(1); }
+  if (d.startsWith('0')) d = d.slice(1);
+  if (d.length === 12) { // con el 15 del celular después de la característica (11, 351, 3543...)
+    for (const n of d.startsWith('11') ? [2] : [3, 4, 2]) if (d.slice(n, n + 2) === '15') { d = d.slice(0, n) + d.slice(n + 2); break; }
+  }
+  if (d.length === 9 && d.startsWith('15')) d = d.slice(2);
+  if (d.length === 7) d = '351' + d; // número local sin característica: Córdoba
+  return { tel: d, valido: d.length === 10 };
+}
+// Lee un teléfono que mandó el panel. null = no vino (no se toca lo guardado).
+function leerTelefono(v, quien, advertencias) {
+  if (v === undefined || v === null) return null;
+  const crudo = txt(v);
+  if (!crudo) return '';
+  const n = normalizarTelefono(crudo);
+  if (!n.tel) falla('"' + crudo + '" no parece un teléfono (' + quien + ').');
+  if (n.tel.length > 13) falla('El teléfono de ' + quien + ' tiene demasiados números: ' + crudo);
+  if (!n.valido) advertencias.push('El teléfono de ' + quien + ' (' + crudo + ') quedó con ' + n.tel.length + ' dígitos: revisalo (característica + número, 10 dígitos).');
+  return n.tel;
+}
+// ¿Quién de los 4 jugadores hizo la reserva? (por el nombre que escribió)
+//   → { lado: 'a' | 'b', jugador: 1 | 2 | 0 }   (0 = es de esa pareja pero no se sabe cuál)
+function quienReservo(nombre, a, b) {
+  const jugadores = [a && a.jugador1, a && a.jugador2, b && b.jugador1, b && b.jugador2].map(txt);
+  const palabras = normNombre(nombre).split(/\s+/).filter((w) => w.length >= 3);
+  const pts = jugadores.map((j) => { const pj = normNombre(j).split(/\s+/).filter(Boolean); return j ? palabras.filter((w) => pj.some((x) => casiIgual(w, x))).length : 0; });
+  const max = Math.max(0, ...pts);
+  if (!max) return null;
+  const mejores = [0, 1, 2, 3].filter((i) => pts[i] === max);
+  if (mejores.length === 1) return { lado: mejores[0] < 2 ? 'a' : 'b', jugador: (mejores[0] % 2) + 1 };
+  if (mejores.length === 2 && Math.floor(mejores[0] / 2) === Math.floor(mejores[1] / 2)) return { lado: mejores[0] < 2 ? 'a' : 'b', jugador: 0 };
+  return null;
+}
+// Teléfonos que dejaron al reservar, para las parejas a las que les falta alguno.
+// Nunca se guardan solos en la pareja: solo se ofrecen para avisar.
+//   → { idPareja: [{ jugador: 1 | 2 | 0, nombre, telefono }] }  (el más reciente primero)
+async function telefonosDeReservas(db, mapa) {
+  const filas = await todos(db, `SELECT r.nombre, r.telefono, COALESCE(NULLIF(r.id_pareja_a, ''), p.pareja_a_id) AS a,
+      COALESCE(NULLIF(r.id_pareja_b, ''), p.pareja_b_id) AS b
+    FROM reservas r LEFT JOIN partidos p ON p.id = r.id_partido WHERE r.telefono <> '' ORDER BY r.creada_ts DESC`);
+  const out = {};
+  for (const r of filas) {
+    const tel = normalizarTelefono(r.telefono).tel;
+    if (tel.length < 8) continue;
+    const quien = quienReservo(r.nombre, mapa[r.a], mapa[r.b]);
+    if (!quien) continue; // no se sabe de qué pareja es: no se usa
+    const id = quien.lado === 'a' ? r.a : r.b, q = mapa[id];
+    if (!q) continue;
+    const guardados = [txt(q.telefono1), txt(q.telefono2)];
+    if (quien.jugador && guardados[quien.jugador - 1]) continue; // ese jugador ya tiene teléfono cargado
+    if (!quien.jugador && guardados[0] && guardados[1]) continue;
+    if (guardados.includes(tel)) continue;
+    const lista = out[id] || (out[id] = []);
+    if (lista.some((x) => x.telefono === tel || (quien.jugador && x.jugador === quien.jugador))) continue;
+    if (lista.length >= 3) continue;
+    lista.push({ jugador: quien.jugador, nombre: quien.jugador ? txt(q['jugador' + quien.jugador]) : txt(r.nombre), telefono: tel });
+  }
+  return out;
+}
+// Todos los números conocidos de una pareja (los cargados primero).
+function contactosDePareja(p, deReservas) {
+  if (!p) return [];
+  const out = [];
+  if (txt(p.telefono1)) out.push({ nombre: txt(p.jugador1), telefono: txt(p.telefono1), origen: 'pareja' });
+  if (txt(p.telefono2)) out.push({ nombre: txt(p.jugador2), telefono: txt(p.telefono2), origen: 'pareja' });
+  for (const x of deReservas || []) if (!out.some((o) => o.telefono === x.telefono)) out.push({ nombre: x.nombre, telefono: x.telefono, origen: 'reserva' });
+  return out;
+}
 async function aAdminParejas(c) {
   await exigirAdmin(c);
   const [parejas, cats] = await Promise.all([
     todos(c.db, 'SELECT * FROM parejas ORDER BY categoria, id'),
     categoriasOrdenadas(c.db),
   ]);
+  const mapa = {};
+  for (const p of parejas) mapa[p.id] = p;
+  const telRes = await telefonosDeReservas(c.db, mapa);
   return {
     categorias: cats.map((x) => x.nombre),
-    parejas: parejas.map((p) => ({ id: p.id, categoria: p.categoria, jugador1: p.jugador1, jugador2: p.jugador2, estado: p.estado })),
+    parejas: parejas.map((p) => ({
+      id: p.id, categoria: p.categoria, jugador1: p.jugador1, jugador2: p.jugador2, estado: p.estado,
+      telefono1: txt(p.telefono1), telefono2: txt(p.telefono2), telefonosReservas: telRes[p.id] || [],
+    })),
   };
 }
 async function aAdminGuardarPareja(c) {
@@ -1122,10 +1211,14 @@ async function aAdminGuardarPareja(c) {
   const estado = mayus(d.estado) === 'BAJA' ? 'BAJA' : 'ACTIVA';
   if (!j1) falla('Falta el nombre del jugador 1.');
   if (!(await uno(c.db, 'SELECT 1 FROM categorias WHERE nombre = ?', categoria))) falla('Elegí una categoría válida.');
+  // Teléfonos: si no vienen (pantallas viejas, otros usos) se deja el que estaba.
+  const advertencias = [];
+  const t1 = leerTelefono(d.telefono1, j1, advertencias), t2 = leerTelefono(d.telefono2, j2 || 'jugador 2', advertencias);
   const id = txt(d.id);
   if (id) {
     const antes = await uno(c.db, 'SELECT estado FROM parejas WHERE id = ?', id);
-    const res = await ejecutar(c.db, 'UPDATE parejas SET categoria = ?, jugador1 = ?, jugador2 = ?, estado = ? WHERE id = ?', categoria, j1, j2, estado, id);
+    const res = await ejecutar(c.db, `UPDATE parejas SET categoria = ?, jugador1 = ?, jugador2 = ?, estado = ?,
+      telefono1 = COALESCE(?, telefono1), telefono2 = COALESCE(?, telefono2) WHERE id = ?`, categoria, j1, j2, estado, t1, t2, id);
     if (res.meta.changes !== 1) falla('No se encontró esa pareja.');
     // Vuelve a estar activa: los partidos que se habían dado por W.O. vuelven a quedar pendientes.
     if (antes && antes.estado === 'BAJA' && estado === 'ACTIVA') {
@@ -1138,12 +1231,136 @@ async function aAdminGuardarPareja(c) {
       c.db.prepare('UPDATE reservas SET pareja_a = ? WHERE id_partido IN (SELECT id FROM partidos WHERE pareja_a_id = ?)').bind(nombre, id),
       c.db.prepare('UPDATE reservas SET pareja_b = ? WHERE id_partido IN (SELECT id FROM partidos WHERE pareja_b_id = ?)').bind(nombre, id),
     ]);
-    return { id };
+    const tels = await uno(c.db, 'SELECT telefono1, telefono2 FROM parejas WHERE id = ?', id);
+    return { id, telefono1: tels.telefono1, telefono2: tels.telefono2, advertencias };
   }
-  const fila = await uno(c.db, `INSERT INTO parejas (id, categoria, jugador1, jugador2, estado)
-    SELECT 'P' || printf('%03d', COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) + 1), ?, ?, ?, ? FROM parejas
-    RETURNING id`, categoria, j1, j2, estado);
-  return { id: fila.id };
+  const fila = await uno(c.db, `INSERT INTO parejas (id, categoria, jugador1, jugador2, estado, telefono1, telefono2)
+    SELECT 'P' || printf('%03d', COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) + 1), ?, ?, ?, ?, ?, ? FROM parejas
+    RETURNING id, telefono1, telefono2`, categoria, j1, j2, estado, t1 || '', t2 || '');
+  return { id: fila.id, telefono1: fila.telefono1, telefono2: fila.telefono2, advertencias };
+}
+// Carga de teléfonos en bloque (para pasar los números que ya se tienen).
+//   { telefonos: [{ idPareja: 'P001', telefono1: '351 618-3879', telefono2: '' }, ...] }
+// Un campo que no viene (o viene null) no se toca; '' lo borra.
+async function aAdminGuardarTelefonos(c) {
+  await exigirAdmin(c);
+  const lista = Array.isArray(c.datos.telefonos) ? c.datos.telefonos : null;
+  if (!lista || !lista.length) falla('Mandá la lista de teléfonos: { telefonos: [{ idPareja, telefono1, telefono2 }] }.');
+  if (lista.length > 1000) falla('Son demasiados de una vez (máximo 1000).');
+  const existentes = await todos(c.db, 'SELECT id, jugador1, jugador2 FROM parejas');
+  const porId = {};
+  for (const p of existentes) porId[p.id] = p;
+  const advertencias = [], noEncontradas = [], cambios = {};
+  for (const x of lista) {
+    const id = txt(x && (x.idPareja || x.id));
+    const p = porId[id];
+    if (!p) { noEncontradas.push(id || '(sin id)'); continue; }
+    const avisosPareja = [];
+    const t1 = leerTelefono(x.telefono1, p.jugador1, avisosPareja), t2 = leerTelefono(x.telefono2, p.jugador2 || 'jugador 2', avisosPareja);
+    for (const a of avisosPareja) advertencias.push(id + ': ' + a);
+    if (t1 === null && t2 === null) continue;
+    cambios[id] = { id, t1, t2 };
+  }
+  const filas = Object.values(cambios);
+  if (filas.length) {
+    await ejecutar(c.db, `UPDATE parejas SET
+        telefono1 = COALESCE((SELECT json_extract(value, '$.t1') FROM json_each(?1) WHERE json_extract(value, '$.id') = parejas.id), telefono1),
+        telefono2 = COALESCE((SELECT json_extract(value, '$.t2') FROM json_each(?1) WHERE json_extract(value, '$.id') = parejas.id), telefono2)
+      WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?1))`, JSON.stringify(filas));
+  }
+  const ids = filas.map((f) => f.id);
+  const despues = ids.length ? await todos(c.db, 'SELECT id, telefono1, telefono2 FROM parejas WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id', JSON.stringify(ids)) : [];
+  return {
+    actualizadas: despues.length, noEncontradas, advertencias,
+    parejas: despues.map((p) => ({ idPareja: p.id, telefono1: p.telefono1, telefono2: p.telefono2 })),
+  };
+}
+
+// ---------- Partidos atrasados y avisos ----------
+// Atrasado = partido de una fecha anterior a la que está en juego en su
+// categoría, sin resultado. Si no tiene reserva, la pareja "debe" el partido
+// y hay que avisarle; si ya reservó (o jugó y falta cerrar) va aparte.
+// Solo cuentan los partidos entre dos parejas activas.
+async function aAdminAtrasados(c) {
+  await exigirAdmin(c);
+  const ahora = Date.now();
+  const atrasadosSql = `FROM partidos p JOIN categorias k ON k.nombre = p.categoria
+    WHERE p.estado <> 'JUGADO' AND k.fecha_en_juego IS NOT NULL AND p.fecha < k.fecha_en_juego`;
+  const [cats, { mapa }, partidos, reservas, avisos] = await Promise.all([
+    categoriasOrdenadas(c.db),
+    mapaParejas(c.db),
+    todos(c.db, 'SELECT p.* ' + atrasadosSql + ' ORDER BY p.fecha, p.id'),
+    todos(c.db, `SELECT * FROM reservas WHERE ${ACTIVA_SQL} AND id_partido IN (SELECT p.id ${atrasadosSql}) ORDER BY fecha DESC`),
+    todos(c.db, `SELECT pareja_id, COUNT(*) AS mensajes, MAX(ts) AS ultimo,
+        COUNT(DISTINCT date((ts - 10800000) / 1000, 'unixepoch')) AS dias
+      FROM avisos_atrasados GROUP BY pareja_id`),
+  ]);
+  const telRes = await telefonosDeReservas(c.db, mapa);
+  const resPorPartido = {};
+  for (const r of reservas) if (!resPorPartido[r.id_partido]) resPorPartido[r.id_partido] = r;
+  const avisosDe = {};
+  for (const a of avisos) avisosDe[a.pareja_id] = a;
+  const activa = (id) => mapa[id] && mapa[id].estado === 'ACTIVA';
+  const contactos = (id) => contactosDePareja(mapa[id], telRes[id]);
+  const salida = cats.map((k) => ({ categoria: k.nombre, fechaEnJuego: k.fecha_en_juego, parejas: [], enCamino: [], partidosSinReservar: 0 }));
+  const porCat = {};
+  for (const x of salida) porCat[x.categoria] = x;
+  const tot = { partidosSinReservar: 0, parejasDeben: 0, tocaAvisar: 0, enCamino: 0, faltaAprobar: 0, reservados: 0, faltaResultado: 0 };
+  const deudas = {}; // idPareja -> ficha
+  for (const p of partidos) {
+    const cat = porCat[p.categoria];
+    if (!cat || !activa(p.pareja_a_id) || !activa(p.pareja_b_id)) continue;
+    const r = resPorPartido[p.id];
+    if (r) {
+      const estado = estadoReserva(r);
+      const etapa = estado === EST.PENDIENTE_APROBACION ? 'aprobar' : estado === EST.FINALIZADO ? 'resultado' : 'reservado';
+      tot.enCamino++;
+      tot[{ aprobar: 'faltaAprobar', resultado: 'faltaResultado', reservado: 'reservados' }[etapa]]++;
+      cat.enCamino.push({
+        idPartido: p.id, fecha: p.fecha, etapa,
+        parejaAId: p.pareja_a_id, parejaA: nombrePareja(mapa[p.pareja_a_id]),
+        parejaBId: p.pareja_b_id, parejaB: nombrePareja(mapa[p.pareja_b_id]),
+        reserva: { idReserva: r.id, fecha: r.fecha, horarioInicio: r.hora_inicio, cancha: r.cancha, estado },
+      });
+      continue;
+    }
+    cat.partidosSinReservar++;
+    tot.partidosSinReservar++;
+    for (const [yo, rival] of [[p.pareja_a_id, p.pareja_b_id], [p.pareja_b_id, p.pareja_a_id]]) {
+      if (!deudas[yo]) {
+        const q = mapa[yo], av = avisosDe[yo];
+        deudas[yo] = {
+          idPareja: yo, categoria: p.categoria, nombre: nombrePareja(q), jugador1: q.jugador1, jugador2: q.jugador2,
+          telefono1: txt(q.telefono1), telefono2: txt(q.telefono2), telefonosReservas: telRes[yo] || [], contactos: contactos(yo),
+          avisos: av ? av.dias : 0, mensajes: av ? av.mensajes : 0, ultimoAviso: av ? av.ultimo : null,
+          tocaAvisar: !av || av.ultimo <= ahora - DIAS_REAVISO * 864e5, partidos: [],
+        };
+        cat.parejas.push(deudas[yo]);
+      }
+      deudas[yo].partidos.push({ idPartido: p.id, fecha: p.fecha, rivalId: rival, rival: nombrePareja(mapa[rival]), rivalContactos: contactos(rival) });
+    }
+  }
+  for (const cat of salida) {
+    cat.parejas.sort((a, b) => b.partidos.length - a.partidos.length || a.idPareja.localeCompare(b.idPareja));
+    tot.parejasDeben += cat.parejas.length;
+    tot.tocaAvisar += cat.parejas.filter((x) => x.tocaAvisar).length;
+  }
+  return { ahora, diasReaviso: DIAS_REAVISO, totales: tot, categorias: salida };
+}
+// El organizador le mandó (o abrió) el WhatsApp a una pareja que debe partidos.
+async function aAdminRegistrarAviso(c) {
+  await exigirAdmin(c);
+  const id = txt(c.datos.idPareja);
+  if (!(await uno(c.db, 'SELECT 1 FROM parejas WHERE id = ?', id))) falla('No se encontró esa pareja.');
+  const tel = normalizarTelefono(c.datos.telefono).tel;
+  const ids = (Array.isArray(c.datos.idsPartidos) ? c.datos.idsPartidos : []).map(txt).filter(Boolean).slice(0, 60);
+  const ahora = Date.now();
+  // Doble toque o volver a abrir el mismo chat enseguida: no se anota dos veces.
+  const reciente = await uno(c.db, 'SELECT id FROM avisos_atrasados WHERE pareja_id = ? AND telefono = ? AND ts > ?', id, tel, ahora - 2 * 60 * 1000);
+  if (!reciente) await ejecutar(c.db, 'INSERT INTO avisos_atrasados (pareja_id, telefono, ts, partidos) VALUES (?, ?, ?, ?)', id, tel, ahora, JSON.stringify(ids));
+  const r = await uno(c.db, `SELECT COUNT(*) AS mensajes, MAX(ts) AS ultimo, COUNT(DISTINCT date((ts - 10800000) / 1000, 'unixepoch')) AS dias
+    FROM avisos_atrasados WHERE pareja_id = ?`, id);
+  return { idPareja: id, registrado: !reciente, avisos: r.dias, mensajes: r.mensajes, ultimoAviso: r.ultimo };
 }
 // Da de baja una pareja: lo que ya jugó queda como está y cada partido que
 // le faltaba se lo gana su rival 6-0 6-0 por W.O. Las reservas de cancha de
@@ -1502,7 +1719,12 @@ async function aImportar(c) {
     }
   }
   const categorias = arr(d.categorias).map((x, i) => ({ nombre: txt(x.nombre), orden: Number(x.orden) || i + 1, fej: x.fechaEnJuego === '' || x.fechaEnJuego === null || x.fechaEnJuego === undefined || isNaN(Number(x.fechaEnJuego)) ? null : Number(x.fechaEnJuego) })).filter((x) => x.nombre);
-  const parejas = arr(d.parejas).map((p) => ({ id: txt(p.id), categoria: txt(p.categoria), j1: txt(p.jugador1), j2: txt(p.jugador2), estado: mayus(p.estado) === 'BAJA' ? 'BAJA' : 'ACTIVA' })).filter((p) => p.id && p.j1);
+  // Los teléfonos no están en la planilla: si no vienen, se conservan los que ya estaban cargados.
+  const telsAntes = {};
+  try { for (const p of await todos(c.db, 'SELECT id, telefono1, telefono2 FROM parejas')) telsAntes[p.id] = p; } catch (e) { /* base vieja sin columnas */ }
+  const telImp = (v, id, col) => (v === undefined || v === null ? txt(telsAntes[id] && telsAntes[id][col]) : normalizarTelefono(v).tel);
+  const parejas = arr(d.parejas).map((p) => ({ id: txt(p.id), categoria: txt(p.categoria), j1: txt(p.jugador1), j2: txt(p.jugador2), estado: mayus(p.estado) === 'BAJA' ? 'BAJA' : 'ACTIVA',
+    t1: telImp(p.telefono1, txt(p.id), 'telefono1'), t2: telImp(p.telefono2, txt(p.id), 'telefono2') })).filter((p) => p.id && p.j1);
   const partidos = arr(d.partidos).map((p) => {
     const a = idDeTxtPareja(p.parejaA), b = idDeTxtPareja(p.parejaB);
     const sets = [p.set1, p.set2, p.set3].map((s) => { const x = parsearSet(s); return x ? x.a + '-' + x.b : ''; });
@@ -1540,7 +1762,7 @@ async function aImportar(c) {
     db.prepare('DELETE FROM categorias'), db.prepare('DELETE FROM bloqueos'),
     db.prepare('DELETE FROM contenido'), db.prepare('DELETE FROM sponsors'), db.prepare("DELETE FROM fotos WHERE url NOT LIKE 'archivo:%'"),
     db.prepare(`INSERT INTO categorias (nombre, orden, fecha_en_juego) SELECT json_extract(value,'$.nombre'), json_extract(value,'$.orden'), json_extract(value,'$.fej') FROM json_each(?)`).bind(J(categorias)),
-    db.prepare(`INSERT INTO parejas (id, categoria, jugador1, jugador2, estado) SELECT json_extract(value,'$.id'), json_extract(value,'$.categoria'), json_extract(value,'$.j1'), json_extract(value,'$.j2'), json_extract(value,'$.estado') FROM json_each(?)`).bind(J(parejas)),
+    db.prepare(`INSERT INTO parejas (id, categoria, jugador1, jugador2, estado, telefono1, telefono2) SELECT json_extract(value,'$.id'), json_extract(value,'$.categoria'), json_extract(value,'$.j1'), json_extract(value,'$.j2'), json_extract(value,'$.estado'), json_extract(value,'$.t1'), json_extract(value,'$.t2') FROM json_each(?)`).bind(J(parejas)),
     db.prepare(`INSERT INTO partidos (id, categoria, fecha, pareja_a_id, pareja_b_id, pareja_a_txt, pareja_b_txt, set1, set2, set3, ganador_id, estado)
       SELECT json_extract(value,'$.id'), json_extract(value,'$.categoria'), json_extract(value,'$.fecha'), json_extract(value,'$.a'), json_extract(value,'$.b'),
         json_extract(value,'$.at'), json_extract(value,'$.bt'), json_extract(value,'$.s1'), json_extract(value,'$.s2'), json_extract(value,'$.s3'),
@@ -1573,6 +1795,7 @@ async function aImportar(c) {
       db.prepare(`INSERT INTO config (clave, valor) SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]') FROM json_each(?)`).bind(J(CONFIG_INICIAL)),
       db.prepare("DELETE FROM fotos"),
       db.prepare("DELETE FROM archivos"),
+      db.prepare('DELETE FROM avisos_atrasados'),
       db.prepare(`INSERT INTO fotos (categoria, titulo, url, orden, creado_ts) SELECT json_extract(value,'$.categoria'), json_extract(value,'$.titulo'), json_extract(value,'$.url'), json_extract(value,'$.orden'), ? FROM json_each(?)`).bind(Date.now(), J(fotos)),
     );
   }
@@ -1641,6 +1864,10 @@ async function asegurarEsquema(db) {
       fin TEXT NOT NULL, canchas INTEGER NOT NULL DEFAULT 1, profe TEXT NOT NULL DEFAULT '')`),
     db.prepare(`CREATE TABLE IF NOT EXISTS turnos_fecha (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, inicio TEXT NOT NULL,
       fin TEXT NOT NULL, canchas INTEGER NOT NULL)`),
+    // Nov 2026: registro de los WhatsApp que el organizador manda a las parejas con partidos atrasados.
+    db.prepare(`CREATE TABLE IF NOT EXISTS avisos_atrasados (id INTEGER PRIMARY KEY AUTOINCREMENT, pareja_id TEXT NOT NULL,
+      telefono TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL, partidos TEXT NOT NULL DEFAULT '[]')`),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_avisos_pareja ON avisos_atrasados(pareja_id, ts)'),
   ]);
   const col = await db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('reservas') WHERE name = 'pagos'").first();
   if (!col || !col.n) {
@@ -1650,6 +1877,12 @@ async function asegurarEsquema(db) {
   const colWo = await db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('partidos') WHERE name = 'wo'").first();
   if (!colWo || !colWo.n) {
     try { await db.prepare('ALTER TABLE partidos ADD COLUMN wo INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* ya existía */ }
+  }
+  // Nov 2026: teléfono de cada jugador de la pareja (para avisarles de los partidos atrasados).
+  const colsPareja = (await db.prepare("SELECT name FROM pragma_table_info('parejas')").all()).results || [];
+  for (const col of ['telefono1', 'telefono2']) {
+    if (colsPareja.some((x) => x.name === col)) continue;
+    try { await db.prepare('ALTER TABLE parejas ADD COLUMN ' + col + " TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* ya existía */ }
   }
   const sembradas = await db.prepare("SELECT valor FROM config WHERE clave = 'clases_sembradas'").first();
   if (!sembradas) {
@@ -1689,7 +1922,8 @@ const ACCIONES = {
   aprobarReserva: aAprobarReserva, rechazarReserva: aRechazarReserva, adminCancelarReserva: aAdminCancelarReserva, adminEliminarReserva: aAdminEliminarReserva, adminMarcarPago: aAdminMarcarPago,
   adminAgenda: aAdminAgenda, adminPartidos: aAdminPartidos, adminGuardarResultado: aAdminGuardarResultado,
   adminFechaEnJuego: aAdminFechaEnJuego, adminFechaEnJuegoTodas: aAdminFechaEnJuegoTodas,
-  adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminDarDeBaja: aAdminDarDeBaja, adminCrearCategoria: aAdminCrearCategoria,
+  adminParejas: aAdminParejas, adminGuardarPareja: aAdminGuardarPareja, adminGuardarTelefonos: aAdminGuardarTelefonos,
+  adminAtrasados: aAdminAtrasados, adminRegistrarAviso: aAdminRegistrarAviso, adminDarDeBaja: aAdminDarDeBaja, adminCrearCategoria: aAdminCrearCategoria,
   adminEliminarCategoria: aAdminEliminarCategoria, adminGenerarFixture: aAdminGenerarFixture,
   adminBloqueos: aAdminBloqueos, adminCrearBloqueo: aAdminCrearBloqueo, adminEliminarBloqueo: aAdminEliminarBloqueo, adminEditarBloqueo: aAdminEditarBloqueo,
   adminClases: aAdminClases, adminGuardarClase: aAdminGuardarClase, adminEliminarClase: aAdminEliminarClase,
