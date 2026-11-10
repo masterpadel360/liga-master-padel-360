@@ -121,6 +121,8 @@ function seSuperponen(i1, f1, i2, f2) { return i1 < f2 && i2 < f1; }
 function isoDeMs(ms) { return new Date(ms + TZ_OFFSET_MS).toISOString().slice(0, 10); }
 function hoyISO() { return isoDeMs(Date.now()); }
 function horaActual() { return new Date(Date.now() + TZ_OFFSET_MS).toISOString().slice(11, 16); }
+// HH:MM de Córdoba, redondeado al minuto siguiente (para "se libera a las ...").
+function horaDeMs(ms) { return new Date(Math.ceil(ms / 60000) * 60000 + TZ_OFFSET_MS).toISOString().slice(11, 16); }
 function diaSemana(iso) { return new Date(iso + 'T00:00:00Z').getUTCDay(); }
 function sumarDias(iso, n) {
   const d = new Date(iso + 'T00:00:00Z');
@@ -560,14 +562,18 @@ async function aPartidosDisponibles(c) {
   if (!categoria || categoria.fecha_en_juego === null || categoria.fecha_en_juego === undefined) return [];
   const cfg = await leerConfig(c.db);
   const corte = Date.now() - cfg.retencionMinutos * 60000;
+  // "retencion" = la retención viva de ESTE celular (salió del checkout sin
+  // poder avisar): ese cruce se le sigue mostrando, para que lo pueda volver
+  // a elegir y reemplazarla (ver aRetenerTurno). A los demás no.
+  const propia = txt(c.datos.retencion).substring(0, 64);
   const [{ mapa }, partidos] = await Promise.all([
     mapaParejas(c.db, cat),
     todos(c.db, `SELECT p.* FROM partidos p
       WHERE p.categoria = ? AND p.estado = ? AND p.fecha <= ?
         AND NOT EXISTS (SELECT 1 FROM reservas r WHERE r.id_partido = p.id AND r.rechazada_ts IS NULL AND r.cancelada_ts IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM retenciones t WHERE t.id_partido = p.id AND t.creada_ts > ?)
+        AND NOT EXISTS (SELECT 1 FROM retenciones t WHERE t.id_partido = p.id AND t.creada_ts > ? AND t.id <> ?)
         AND NOT EXISTS (SELECT 1 FROM parejas x WHERE x.id IN (p.pareja_a_id, p.pareja_b_id) AND x.estado = 'BAJA')
-      ORDER BY p.fecha, p.id`, cat, PENDIENTE, categoria.fecha_en_juego, corte),
+      ORDER BY p.fecha, p.id`, cat, PENDIENTE, categoria.fecha_en_juego, corte, propia),
   ]);
   return partidos.map((p) => ({
     idPartido: p.id, fecha: p.fecha,
@@ -606,27 +612,43 @@ async function aRetenerTurno(c) {
   const ahora = Date.now();
   const corte = ahora - cfg.retencionMinutos * 60000;
   const idRetencion = uuid();
+  // "reemplazar" = la retención anterior de ESTE mismo celular para ESTE
+  // mismo cruce (el jugador salió del checkout sin confirmar y volvió a
+  // elegir turno). Esa retención propia no lo bloquea: no se cuenta como
+  // "cruce ocupado" ni como lugar ocupado, y se borra en la misma
+  // transacción SOLO si la nueva entró. Si la nueva no entra (por ejemplo
+  // ese otro horario está lleno), la anterior queda como estaba.
+  // Una retención de OTRO cruce nunca se toca: tanto el filtro como el
+  // borrado exigen id_partido = el de este pedido.
+  const reemplazar = txt(d.reemplazar).substring(0, 64);
   // UNA sola instrucción: inserta la retención SOLO si el cruce sigue libre
   // y todavía queda lugar en la franja. La base ejecuta las escrituras de a
   // una, así que dos personas jamás pueden quedarse con el mismo lugar.
-  const res = await ejecutar(c.db, `
+  const [res] = await c.db.batch([
+    c.db.prepare(`
     INSERT INTO retenciones (id, fecha, hora_inicio, hora_fin, id_partido, creada_ts)
     SELECT ?1, ?2, ?3, ?4, ?5, ?6
     WHERE EXISTS (SELECT 1 FROM partidos WHERE id = ?5 AND estado = 'PENDIENTE')
       AND NOT EXISTS (SELECT 1 FROM reservas WHERE id_partido = ?5 AND ${ACTIVA_SQL})
-      AND NOT EXISTS (SELECT 1 FROM retenciones WHERE id_partido = ?5 AND creada_ts > ?7)
+      AND NOT EXISTS (SELECT 1 FROM retenciones WHERE id_partido = ?5 AND creada_ts > ?7 AND id <> ?10)
       AND (
         (SELECT COUNT(*) FROM reservas WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin AND ${ACTIVA_SQL})
-      + (SELECT COUNT(*) FROM retenciones WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin AND creada_ts > ?7)
+      + (SELECT COUNT(*) FROM retenciones WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin AND creada_ts > ?7 AND NOT (id = ?10 AND id_partido = ?5))
       + (SELECT COALESCE(SUM(CASE WHEN UPPER(cancha) = 'TODAS' THEN ?9 ELSE 1 END), 0) FROM bloqueos WHERE fecha = ?2 AND hora_inicio < ?4 AND ?3 < hora_fin)
-      ) < ?8`,
-    idRetencion, fecha, inicio, fin, idPartido, ahora, corte, franja.cap, cfg.cantidadCanchas);
+      ) < ?8`)
+      .bind(idRetencion, fecha, inicio, fin, idPartido, ahora, corte, franja.cap, cfg.cantidadCanchas, reemplazar),
+    c.db.prepare('DELETE FROM retenciones WHERE id = ?1 AND id_partido = ?2 AND id <> ?3 AND EXISTS (SELECT 1 FROM retenciones WHERE id = ?3)')
+      .bind(reemplazar, idPartido, idRetencion),
+  ]);
 
-  if (!res.meta || res.meta.changes !== 1) {
-    const ocupado = await uno(c.db, `SELECT
-        (SELECT COUNT(*) FROM reservas WHERE id_partido = ?1 AND ${ACTIVA_SQL}) +
-        (SELECT COUNT(*) FROM retenciones WHERE id_partido = ?1 AND creada_ts > ?2) AS n`, idPartido, corte);
-    if (ocupado && ocupado.n > 0) falla('Ese cruce ya tiene una reserva en curso. Elegí otro.');
+  if (!res || !res.meta || res.meta.changes !== 1) {
+    const reservado = await uno(c.db, `SELECT COUNT(*) AS n FROM reservas WHERE id_partido = ? AND ${ACTIVA_SQL}`, idPartido);
+    if (reservado && reservado.n > 0) falla('Ese cruce ya tiene una reserva en curso. Elegí otro.');
+    const otra = await uno(c.db, 'SELECT MAX(creada_ts) AS ts FROM retenciones WHERE id_partido = ? AND creada_ts > ? AND id <> ?', idPartido, corte, reemplazar);
+    if (otra && otra.ts) {
+      falla('Alguien de tu partido está reservando este cruce ahora. Si no termina, se libera a las ' +
+        horaDeMs(otra.ts + cfg.retencionMinutos * 60000) + '.');
+    }
     falla('Ese horario ya no tiene lugar disponible.');
   }
   c.ctx.waitUntil(ejecutar(c.db, 'DELETE FROM retenciones WHERE creada_ts < ?', ahora - 24 * 60 * 60 * 1000).catch(() => {}));
@@ -635,6 +657,19 @@ async function aRetenerTurno(c) {
     idRetencion, minutos: cfg.retencionMinutos, valorTotal: cfg.valorTurno, montoSena: cfg.montoSena, alias: cfg.alias,
     fecha, horarioInicio: inicio, horarioFin: fin, categoria: partido.categoria, parejaA: partido.parejaA, parejaB: partido.parejaB,
   };
+}
+
+// El jugador salió del checkout sin confirmar: se borra SOLO esa retención
+// para que el cruce y el lugar queden libres al instante (si no, quedaban
+// trabados hasta que vencieran los minutos de retención). Es idempotente:
+// si ya no existe (venció, ya se liberó o ya se convirtió en reserva) no
+// hace nada. Una reserva ya creada no depende de su retención, así que
+// liberar después de confirmar no la afecta.
+async function aLiberarRetencion(c) {
+  const id = txt(c.datos.idRetencion).substring(0, 64);
+  if (!id) return { liberada: false };
+  const res = await ejecutar(c.db, 'DELETE FROM retenciones WHERE id = ?', id);
+  return { liberada: !!(res.meta && res.meta.changes === 1) };
 }
 
 function formatoReservaJugador(r) {
@@ -1915,7 +1950,7 @@ const ACCIONES = {
   bootstrap: aBootstrap, categorias: aCategorias, posiciones: aPosiciones, fixture: aFixture, resultados: aResultados,
   mas: aMas, galeria: aGaleria, sponsors: aSponsors,
   verificarAcceso: aVerificarAcceso, validarTokenAcceso: aValidarTokenAcceso,
-  disponibilidad: aDisponibilidad, partidosDisponibles: aPartidosDisponibles, retenerTurno: aRetenerTurno,
+  disponibilidad: aDisponibilidad, partidosDisponibles: aPartidosDisponibles, retenerTurno: aRetenerTurno, liberarRetencion: aLiberarRetencion,
   confirmarReserva: aConfirmarReserva, consultarReserva: aConsultarReserva, buscarReserva: aBuscarReserva, cancelarReserva: aCancelarReserva,
   // organizador
   adminLogin: aAdminLogin, adminResumen: aAdminResumen, adminReservas: aAdminReservas, listarPendientes: aListarPendientes,

@@ -536,6 +536,105 @@ console.log('15) Teléfonos de las parejas y avisos de atrasados (base vieja que
   check(tras.telefono1 === '3516183879' && tras.telefono2 === '3512417105', 'reimportar conserva los teléfonos', tras);
 }
 
+console.log('16) Salir del checkout libera la retención; la propia no bloquea');
+{
+  const cuenta = (sql, ...p) => DB.prepare(sql).bind(...p).first().then((r) => r.n);
+  const dispL = await ok('disponibilidad', {}, 'GET');
+  let diaL = null, frL = null, otraFr = null;
+  for (const d of dispL.dias) {
+    if (d.fecha <= masDias(1)) continue;
+    const f = d.franjas.find((x) => x.disponibles >= 3);
+    const o = f && d.franjas.find((x) => x !== f && x.disponibles >= 2 && !(x.inicio < f.fin && f.inicio < x.fin));
+    if (f && o) { diaL = d; frL = f; otraFr = o; break; }
+  }
+  check(diaL && frL && otraFr, 'hay un día con dos franjas libres para probar', dispL.dias.map((d) => d.franjas.map((f) => f.disponibles)));
+  const libresEn = async (fecha, ini) => { const dd = (await ok('disponibilidad', {}, 'GET')).dias.find((d) => d.fecha === fecha); const f = dd && dd.franjas.find((x) => x.inicio === ini); return f ? f.disponibles : 0; };
+  const crucesL = [];
+  for (const cat of cats) for (const x of await ok('partidosDisponibles', { categoria: cat }, 'GET')) crucesL.push({ ...x, cat });
+  const X = crucesL[0].idPartido, Y = crucesL[1].idPartido;
+  const tX = { idPartido: X, fecha: diaL.fecha, horarioInicio: frL.inicio, horarioFin: frL.fin };
+  const tXotra = { ...tX, horarioInicio: otraFr.inicio, horarioFin: otraFr.fin };
+
+  // Celular A retiene el cruce X
+  const retA = await ok('retenerTurno', tX);
+  check(retA && retA.idRetencion, 'A retiene el cruce X');
+  check(await libresEn(diaL.fecha, frL.inicio) === frL.disponibles - 1, 'la retención ocupa un lugar');
+  // Celular B (compañero) intenta el mismo cruce: mensaje claro con la hora en que se libera
+  const bloq = await api('retenerTurno', tXotra);
+  const filaA = await DB.prepare('SELECT creada_ts FROM retenciones WHERE id = ?').bind(retA.idRetencion).first();
+  const horaEsperada = new Date(Math.ceil((filaA.creada_ts + retA.minutos * 60000) / 60000) * 60000 - 3 * 3600e3).toISOString().slice(11, 16);
+  check(bloq.ok === false && bloq.error === 'Alguien de tu partido está reservando este cruce ahora. Si no termina, se libera a las ' + horaEsperada + '.', 'retenido por otro: avisa a qué hora se libera', bloq.error);
+  check(/se libera a las/.test((await api('retenerTurno', { ...tXotra, reemplazar: 'id-inventado' })).error), 'reemplazar con un id que no es suyo no saltea la retención de otro');
+
+  // A sale del checkout: libera y el cruce queda libre al instante
+  const lib = await ok('liberarRetencion', { idRetencion: retA.idRetencion });
+  check(lib && lib.liberada === true, 'liberar borra la retención', lib);
+  check(await cuenta('SELECT COUNT(*) AS n FROM retenciones WHERE id = ?', retA.idRetencion) === 0, 'la retención ya no está en la base');
+  check(await libresEn(diaL.fecha, frL.inicio) === frL.disponibles, 'el lugar vuelve a estar disponible al instante');
+  check((await ok('partidosDisponibles', { categoria: crucesL[0].cat }, 'GET')).some((p) => p.idPartido === X), 'el cruce vuelve a aparecer para reservar');
+  check((await ok('liberarRetencion', { idRetencion: retA.idRetencion })).liberada === false, 'liberar dos veces no hace nada (idempotente)');
+  check((await ok('liberarRetencion', { idRetencion: 'no-existe-123' })).liberada === false, 'liberar un id desconocido no hace nada');
+  check((await ok('liberarRetencion', {})).liberada === false, 'liberar sin id no hace nada');
+  check((await ok('liberarRetencion', { idRetencion: 'otro-inexistente' }, 'GET')).liberada === false, 'liberar también anda por GET');
+  // Lo que manda navigator.sendBeacon: POST con el JSON como text/plain
+  const beacon = await worker.fetch(new Request('https://api.test/?accion=liberarRetencion', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ idRetencion: 'x' }) }), env, ctx);
+  check((await beacon.json()).ok === true, 'liberar con el formato de sendBeacon (text/plain)');
+
+  // B ahora sí puede retenerlo
+  const retB = await ok('retenerTurno', tXotra);
+  check(retB && retB.idRetencion, 'después de liberar, otro celular retiene el mismo cruce');
+
+  // B sale sin liberar (se cerró la app) y vuelve a elegir: su retención no lo bloquea
+  const catX = crucesL[0].cat;
+  check(!(await ok('partidosDisponibles', { categoria: catX }, 'GET')).some((p) => p.idPartido === X), 'retenido: los demás no ven el cruce');
+  check((await ok('partidosDisponibles', { categoria: catX, retencion: retB.idRetencion }, 'GET')).some((p) => p.idPartido === X), 'el celular que lo retiene sí lo sigue viendo');
+  check(!(await ok('partidosDisponibles', { categoria: catX, retencion: 'id-inventado' }, 'GET')).some((p) => p.idPartido === X), 'con un id que no es el suyo, no lo ve');
+  const retB2 = await api('retenerTurno', { ...tX, reemplazar: retB.idRetencion });
+  check(retB2.ok && retB2.data.idRetencion !== retB.idRetencion, 'reemplazar la retención propia del mismo cruce funciona', retB2);
+  check(await cuenta('SELECT COUNT(*) AS n FROM retenciones WHERE id = ?', retB.idRetencion) === 0, 'la retención anterior se borró');
+  check(await cuenta('SELECT COUNT(*) AS n FROM retenciones WHERE id_partido = ?', X) === 1, 'queda una sola retención para el cruce');
+  check(await libresEn(diaL.fecha, otraFr.inicio) === otraFr.disponibles, 'el lugar del horario anterior se liberó');
+
+  // Reemplazar con el id de OTRO cruce no lo borra
+  const retY = await ok('retenerTurno', { ...tX, idPartido: Y });
+  await ok('liberarRetencion', { idRetencion: retB2.data.idRetencion });
+  const retX3 = await api('retenerTurno', { ...tX, reemplazar: retY.idRetencion });
+  check(retX3.ok, 'retener X con reemplazar = id de otro cruce igual retiene X', retX3);
+  check(await cuenta('SELECT COUNT(*) AS n FROM retenciones WHERE id = ?', retY.idRetencion) === 1, 'la retención del otro cruce NO se borra');
+  check(await libresEn(diaL.fecha, frL.inicio) === frL.disponibles - 2, 'X e Y ocupan sus dos lugares');
+
+  // Franja llena: reemplazarse en la misma franja entra (su propio lugar no cuenta),
+  // pero pasarse a una franja llena no entra y la retención anterior se conserva.
+  const llenos = [];
+  const extra = crucesL.slice(2);
+  let k = 0;
+  while (await libresEn(diaL.fecha, frL.inicio) > 0 && k < extra.length) {
+    const r = await api('retenerTurno', { ...tX, idPartido: extra[k++].idPartido });
+    if (r.ok) llenos.push(r.data.idRetencion);
+  }
+  check(await libresEn(diaL.fecha, frL.inicio) === 0, 'franja llena');
+  const mismoLugar = await api('retenerTurno', { ...tX, reemplazar: retX3.data && retX3.data.idRetencion });
+  check(mismoLugar.ok, 'reemplazarse en la misma franja llena entra', mismoLugar);
+  const idX = mismoLugar.ok ? mismoLugar.data.idRetencion : retX3.data.idRetencion;
+  const Z = extra[k].idPartido;
+  const retZ = await ok('retenerTurno', { ...tXotra, idPartido: Z });
+  const zLleno = await api('retenerTurno', { ...tX, idPartido: Z, reemplazar: retZ.idRetencion });
+  check(zLleno.error === 'Ese horario ya no tiene lugar disponible.', 'franja llena: mensaje de lugar, no de cruce', zLleno);
+  check(await cuenta('SELECT COUNT(*) AS n FROM retenciones WHERE id = ?', retZ.idRetencion) === 1, 'si no entra, la retención anterior se conserva');
+  for (const id of [...llenos, retY.idRetencion, retZ.idRetencion]) await ok('liberarRetencion', { idRetencion: id });
+
+  // Flujo normal: retener → confirmar crea exactamente una reserva; liberar después no la toca
+  const conf16 = await ok('confirmarReserva', { idRetencion: idX, nombre: 'Lib', telefono: '3517778899', comprobanteBase64: png, comprobanteTipoMime: 'image/png' });
+  check(conf16 && conf16.estadoReserva === 'PENDIENTE_APROBACION', 'confirmar después de reemplazar funciona', conf16);
+  check(await cuenta('SELECT COUNT(*) AS n FROM reservas WHERE id_partido = ? AND rechazada_ts IS NULL AND cancelada_ts IS NULL', X) === 1, 'exactamente una reserva para el cruce');
+  check((await ok('liberarRetencion', { idRetencion: idX })).liberada === false, 'liberar después de confirmar no hace nada');
+  check((await ok('consultarReserva', { token: conf16.tokenGestion }, 'GET')).estadoReserva === 'PENDIENTE_APROBACION', 'la reserva sigue intacta');
+  const conf16b = await ok('confirmarReserva', { idRetencion: idX, nombre: 'Lib', telefono: '3517778899', comprobanteBase64: png, comprobanteTipoMime: 'image/png' });
+  check(conf16b && conf16b.idReserva === conf16.idReserva, 'reintento de confirmar sigue devolviendo la misma reserva');
+  check(await cuenta('SELECT COUNT(*) AS n FROM reservas WHERE id_partido = ?', X) === 1, 'sigue habiendo una sola reserva');
+  check((await api('retenerTurno', { ...tX, reemplazar: idX })).error === 'Ese cruce ya tiene una reserva en curso. Elegí otro.', 'cruce ya reservado: no se puede volver a retener');
+}
+
 console.log('11) Publicar: reiniciar todo como está en la planilla');
 const antesG = await ok('adminGrilla', A());
 check((await DB.prepare("SELECT valor FROM config WHERE clave = 'valor_turno'").first()).valor !== '36000' && (await DB.prepare('SELECT COUNT(*) AS n FROM archivos').first()).n > 0, 'antes: hay cambios de prueba (precio, archivos)', antesG.clases.length + ' clases, ' + antesG.turnosEspeciales.length + ' especiales');

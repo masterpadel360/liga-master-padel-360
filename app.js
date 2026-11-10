@@ -320,6 +320,13 @@ function irA(pantalla) {
   // toda su lógica/carga. Esto evita dobles pedidos por taps repetidos.
   if (pantalla === pantallaActual && !destino.hidden) return;
 
+  // Salir de "Reservar turno" en pleno checkout (sin confirmar) suelta la
+  // retención: si no, el cruce quedaba trabado 10 minutos para todos
+  // (ver "Retención: soltarla al salir del checkout").
+  if (pantallaActual === 'reservar' && typeof reservarEnCheckout_ === 'function' && reservarEnCheckout_() && !reservaEnvioEnCurso_) {
+    reservarVolverATurnos_();
+  }
+
   var actual = document.getElementById('screen-' + pantallaActual);
   if (actual) actual.hidden = true;
   pantallaActual = pantalla;
@@ -1072,6 +1079,114 @@ var reservaEnvioEnCurso_ = false;
 
 var RSV_PASOS_ = ['categoria', 'cruce', 'turno', 'checkout'];
 
+// ------------------------------------------------------------
+// Retención: soltarla al salir del checkout
+// ------------------------------------------------------------
+// BUG real reportado por varios jugadores: al elegir horario el servidor
+// "retiene" el cruce por 10 minutos. Si el jugador salía del checkout sin
+// confirmar (volvía atrás, cambiaba de pantalla, cerraba la app) la
+// retención quedaba viva esos 10 minutos, y al volver a intentarlo -- él
+// o su compañero -- el servidor contestaba "Ese cruce ya tiene una
+// reserva en curso". Parecía que el partido se había trabado.
+// Arreglo en tres partes:
+//   1) Al salir del checkout sin confirmar se avisa al servidor
+//      (liberarRetencion) y el cruce queda libre al instante. Al cerrar o
+//      recargar la página se usa sendBeacon, que llega aunque la página
+//      ya se esté yendo.
+//   2) La retención se recuerda en localStorage: si este mismo celular
+//      vuelve a elegir horario para el MISMO cruce (por ejemplo la app se
+//      cerró sin llegar a avisar), manda "reemplazar" con el id anterior y
+//      el servidor cambia una por otra -- su propia retención no lo traba.
+//   3) Si el que lo tiene retenido es OTRO celular, el servidor ya
+//      contesta "Alguien de tu partido está reservando... se libera a las
+//      HH:MM".
+// A propósito NO se suelta al pasar a segundo plano (visibilitychange):
+// en pleno checkout el jugador sale a la app del banco a transferir la
+// seña, o el selector de archivos/cámara tapa la página -- soltar ahí
+// le haría perder el turno justo cuando está pagando.
+// Tampoco se suelta nunca con la confirmación en vuelo
+// (reservaEnvioEnCurso_): si no, el servidor podría recibir primero el
+// "liberar" y rechazar la confirmación.
+var LS_RETENCION_ = 'mp360_retencion';
+function guardarRetencionLocal_(datos, idPartido) {
+  try {
+    localStorage.setItem(LS_RETENCION_, JSON.stringify({
+      idRetencion: datos.idRetencion, idPartido: idPartido, fecha: datos.fecha,
+      horarioInicio: datos.horarioInicio, horarioFin: datos.horarioFin,
+      vence: Date.now() + (Number(datos.minutos) || 10) * 60000,
+    }));
+  } catch (e) { /* sin storage: solo se pierde el "reemplazar" la próxima vez */ }
+}
+function leerRetencionLocal_() {
+  try {
+    var r = JSON.parse(localStorage.getItem(LS_RETENCION_) || 'null');
+    if (r && r.idRetencion && r.vence > Date.now()) return r;
+    if (r) localStorage.removeItem(LS_RETENCION_);
+  } catch (e) { /* storage no disponible o dato roto */ }
+  return null;
+}
+function borrarRetencionLocal_() {
+  try { localStorage.removeItem(LS_RETENCION_); } catch (e) { /* nada que borrar */ }
+}
+// Avisa al servidor que suelte esa retención. Nunca falla hacia afuera:
+// si el aviso no llega, la retención vence sola a los 10 minutos como
+// siempre (y este celular igual la puede reemplazar). Con usarBeacon
+// (al cerrar/recargar la página) va por navigator.sendBeacon; el cuerpo
+// va como text/plain para que no dispare un preflight CORS (el Worker lo
+// lee con request.text() + JSON.parse, igual que reservasApiPost_).
+function enviarLiberarRetencion_(idRetencion, usarBeacon) {
+  if (!idRetencion || !USA_CLOUDFLARE_) return Promise.resolve();
+  var url = RESERVAS_API_URL + '?accion=liberarRetencion';
+  var cuerpo = JSON.stringify({ idRetencion: idRetencion });
+  if (usarBeacon) {
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([cuerpo], { type: 'text/plain;charset=utf-8' }))) return Promise.resolve();
+    } catch (e) { /* sigue con fetch keepalive */ }
+  }
+  try {
+    return fetchConTimeout_(url, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: cuerpo, keepalive: true,
+    }, 5000).then(function () {}, function () {});
+  } catch (e) { return Promise.resolve(); }
+}
+// Suelta la retención activa (si hay y no se está confirmando) y limpia
+// el estado local. Devuelve una promesa que se resuelve cuando el
+// servidor contestó (o enseguida si no había nada que soltar).
+function reservarSoltarRetencion_(usarBeacon) {
+  if (reservaEnvioEnCurso_) return Promise.resolve();
+  if (reservaCountdownTimer_) { clearInterval(reservaCountdownTimer_); reservaCountdownTimer_ = null; }
+  var r = reservaRetencion_;
+  reservaRetencion_ = null;
+  borrarRetencionLocal_();
+  return r ? enviarLiberarRetencion_(r.idRetencion, usarBeacon) : Promise.resolve();
+}
+function reservarEnCheckout_() {
+  var panel = document.getElementById('rsv-panel-checkout');
+  return !!(panel && !panel.hidden && reservaRetencion_);
+}
+// Vuelve del checkout a la lista de horarios soltando la retención. La
+// disponibilidad se pide DESPUÉS de que el servidor soltó, así el lugar
+// recién liberado ya aparece libre.
+function reservarVolverATurnos_() {
+  var soltar = reservarSoltarRetencion_(false);
+  delete cache_.disponibilidad;
+  document.getElementById('rsv-checkout-err-actions').hidden = true;
+  document.getElementById('rsvDias').innerHTML = '<div class="state-loading">Cargando…</div>';
+  reservarIrAPaso_('turno');
+  soltar.then(function () { if (!reservaRetencion_) reservarCargarDisponibilidad_(); });
+}
+// Cerrar la pestaña, recargar o salir de la página con "atrás".
+window.addEventListener('pagehide', function () {
+  if (!reservarEnCheckout_() || reservaEnvioEnCurso_) return;
+  reservarSoltarRetencion_(true);
+  // Si el navegador la restaura desde memoria (bfcache), que no muestre
+  // un checkout con una retención que ya no existe: el asistente vuelve a
+  // arrancar de cero la próxima vez que se entre a "Reservar turno".
+  delete cache_.disponibilidad;
+  reservaCategoria_ = null;
+  reservaPartido_ = null;
+});
+
 function reservarIrAPaso_(paso) {
   RSV_PASOS_.concat(['exito']).forEach(function (p) {
     var panel = document.getElementById('rsv-panel-' + p);
@@ -1122,7 +1237,11 @@ function reservarCargarCruces_() {
   var catPedida = reservaCategoria_;
   var clave = 'cruces|' + catPedida;
   if (!cache_[clave]) cont.innerHTML = '<div class="state-loading">Cargando…</div>';
-  pedirConCache_(clave, function () { return reservasApiGet_('partidosDisponibles', { categoria: catPedida }); }).then(function (lista) {
+  // Si este celular tiene una retención viva (salió sin poder soltarla),
+  // se manda para que su cruce no desaparezca de la lista: así lo puede
+  // volver a elegir y la retención se reemplaza (ver aRetenerTurno).
+  var propia = leerRetencionLocal_();
+  pedirConCache_(clave, function () { return reservasApiGet_('partidosDisponibles', { categoria: catPedida, retencion: propia ? propia.idRetencion : null }); }).then(function (lista) {
     if (reservaCategoria_ !== catPedida) return;
     reservaCruces_ = Array.isArray(lista) ? lista : [];
     if (!reservaCruces_.length) {
@@ -1220,11 +1339,21 @@ document.addEventListener('click', function (e) {
   var horaTextoOriginal = horaSpan ? horaSpan.textContent : '';
   if (horaSpan) horaSpan.textContent = 'Reservando…';
 
-  reservasApiPost_('retenerTurno', {
-    idPartido: reservaPartido_.idPartido, fecha: fecha, horarioInicio: horarioInicio, horarioFin: horarioFin,
-  }).then(function (datos) {
+  // Si este celular ya tiene una retención viva para este mismo cruce (se
+  // salió sin poder avisar al servidor), se pide reemplazarla: así la
+  // propia retención no bloquea (ver "Retención: soltarla al salir").
+  var idPartidoPedido = reservaPartido_.idPartido;
+  var previa = leerRetencionLocal_();
+  var pedido = { idPartido: idPartidoPedido, fecha: fecha, horarioInicio: horarioInicio, horarioFin: horarioFin };
+  if (previa && previa.idPartido === idPartidoPedido) pedido.reemplazar = previa.idRetencion;
+
+  reservasApiPost_('retenerTurno', pedido).then(function (datos) {
     reservaEnvioEnCurso_ = false;
     reservaRetencion_ = datos;
+    guardarRetencionLocal_(datos, idPartidoPedido);
+    // Una retención vieja de OTRO cruce de este celular ya quedó
+    // abandonada: se suelta para no trabarle el partido a nadie.
+    if (previa && previa.idPartido !== idPartidoPedido) enviarLiberarRetencion_(previa.idRetencion, false);
     reservarIniciarCountdown_(datos.minutos);
     reservarPintarResumenCheckout_();
     reservarIrAPaso_('checkout');
@@ -1270,6 +1399,9 @@ function reservarIniciarCountdown_(minutos) {
       reservarMostrarErrorCheckout_('La retención venció. Elegí el turno nuevamente.', true);
       var btn = document.getElementById('rsvConfirmarBtn');
       if (btn) btn.disabled = true;
+      // Se suelta igual en el servidor (por si su reloj va unos segundos
+      // atrasado) -- salvo que la confirmación esté en vuelo, que manda.
+      reservarSoltarRetencion_(false);
       return;
     }
     if (el) {
@@ -1305,13 +1437,12 @@ function reservarPintarResumenCheckout_() {
   document.getElementById('rsvUploadTx').textContent = RSV_TEXTO_UPLOAD_;
   reservaComprobante_ = null;
 }
-document.getElementById('rsvElegirOtroTurno').addEventListener('click', function () {
-  if (reservaCountdownTimer_) { clearInterval(reservaCountdownTimer_); reservaCountdownTimer_ = null; }
-  reservaRetencion_ = null;
-  delete cache_.disponibilidad;
-  document.getElementById('rsv-checkout-err-actions').hidden = true;
-  reservarCargarDisponibilidad_();
-  reservarIrAPaso_('turno');
+// "Elegir otro turno" (después de un error) y "‹ Horarios" (volver sin
+// confirmar): sueltan la retención para que el cruce quede libre ya.
+document.getElementById('rsvElegirOtroTurno').addEventListener('click', reservarVolverATurnos_);
+document.getElementById('rsvVolverDeCheckout').addEventListener('click', function () {
+  if (reservaEnvioEnCurso_) return; // confirmando: no se puede salir a mitad
+  reservarVolverATurnos_();
 });
 document.addEventListener('click', function (e) {
   var el = e.target.closest('[data-rsv-back]');
@@ -1557,6 +1688,7 @@ function reservarPintarExito_(datos) {
   reservaPartido_ = null;
   reservaRetencion_ = null;
   reservaComprobante_ = null;
+  borrarRetencionLocal_();
 }
 // "Volver a Reservas": el estado del wizard ya quedó limpio arriba, en
 // reservarPintarExito_, apenas se pintó esta pantalla -- acá solo hace
