@@ -437,6 +437,22 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
 .po-campeon-lbl{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold)}
 .po-campeon b{font-size:1rem}
 .po-ronda{display:flex;flex-direction:column;gap:8px}
+.po-llave{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 10px 12px}
+.po-lienzo{position:relative;color:rgba(230,168,60,.55)}
+.po-lienzo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.po-col-tit{position:absolute;top:0;text-align:center;font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.po-m{position:absolute;border:1px solid var(--border);border-radius:9px;background:var(--surface-strong);overflow:hidden}
+.po-s{height:34px;display:flex;align-items:center;gap:4px;padding:0 7px;font-size:.68rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.po-s + .po-s{border-top:1px solid var(--border)}
+.po-n{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.po-s i{font-style:normal;color:var(--gold);font-weight:800;flex-shrink:0}
+.po-s.vacio{color:var(--text-dim);font-weight:600}
+.po-s.gana{color:var(--gold)}
+.po-s.pierde{color:var(--text-faint)}
+.po-copa{position:absolute;height:36px;display:flex;align-items:center;justify-content:center;padding:0 6px;border:1px dashed rgba(230,168,60,.55);border-radius:9px;font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.po-copa.lleno{border-style:solid;background:var(--gold-dim)}
+.po-ayuda{margin:10px 0 0;font-size:.72rem;color:var(--text-dim);text-align:center;line-height:1.4}
+.po-detalle-tit{margin-top:4px}
 .po-partido{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
 .po-fila{display:flex;align-items:center;gap:10px;padding:11px 13px}
 .po-fila + .po-fila{border-top:1px solid var(--border)}

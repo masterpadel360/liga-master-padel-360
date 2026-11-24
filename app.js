@@ -845,6 +845,18 @@ function renderPlayoffs_() {
   if (fin.gana === 'a' || fin.gana === 'b') {
     html += '<div class="po-campeon"><span class="po-campeon-lbl">🏆 Campeones</span><b>' + esc_(fin[fin.gana]) + '</b></div>';
   }
+  html += dibujoLlave_(formato, cat.partidos || {});
+  if (!playoffsTieneNombres_(cat)) {
+    cuadro.innerHTML = html;
+    cuadro.hidden = false; vacio.hidden = true;
+    pintarFormatoPlayoffs_(formato);
+    cuadro.onclick = function (e) {
+      var b = e.target.closest('[data-po-cat]');
+      if (b) { playoffsCat_ = b.getAttribute('data-po-cat'); renderPlayoffs_(); }
+    };
+    return;
+  }
+  html += '<div class="fecha-block-label po-detalle-tit">Partidos</div>';
   PLAYOFFS_RONDAS_[formato].forEach(function (r) {
     html += '<div class="po-ronda"><div class="fecha-block-label">' + r.ronda + '</div>';
     r.partidos.forEach(function (def) {
@@ -867,6 +879,61 @@ function renderPlayoffs_() {
     var b = e.target.closest('[data-po-cat]');
     if (b) { playoffsCat_ = b.getAttribute('data-po-cat'); renderPlayoffs_(); }
   };
+}
+// Dibujo de la llave (cuadro con líneas). Posiciones: x en % del ancho,
+// y en px. Cada partido = 2 casilleros de 34 px.
+function apellidosPareja_(n) {
+  return String(n || '').split('/').map(function (j) {
+    var w = j.trim().split(/\s+/);
+    return w[w.length - 1] || '';
+  }).join(' / ');
+}
+function dibujoLlave_(formato, partidos) {
+  var S = 34, M = S * 2;
+  var L = formato === 4 ? {
+    alto: 222,
+    cols: [['Semis', 0, 44], ['Final', 54, 46]],
+    m: [
+      { k: 's1', x: 0, w: 44, y: 30, a: ['1.º', '1.º puesto'], b: ['4.º', '4.º puesto'] },
+      { k: 's2', x: 0, w: 44, y: 140, a: ['2.º', '2.º puesto'], b: ['3.º', '3.º puesto'] },
+      { k: 'f', x: 54, w: 46, y: 85, a: ['', 'Ganador semi 1'], b: ['', 'Ganador semi 2'] }
+    ],
+    lineas: ['44,64 49,64 49,102 54,102', '44,174 49,174 49,136 54,136'],
+    copa: { x: 54, w: 46, y: 176, desde: '77,153 77,176' }
+  } : {
+    alto: 258,
+    cols: [['Cuartos', 0, 31], ['Semis', 35, 31], ['Final', 70, 30]],
+    m: [
+      { k: 'c2', x: 0, w: 31, y: 47, a: ['4.º', '4.º puesto'], b: ['5.º', '5.º puesto'] },
+      { k: 'c1', x: 0, w: 31, y: 175, a: ['3.º', '3.º puesto'], b: ['6.º', '6.º puesto'] },
+      { k: 's1', x: 35, w: 31, y: 30, a: ['1.º', '1.º puesto'], b: ['', 'Ganador 4.º-5.º'] },
+      { k: 's2', x: 35, w: 31, y: 158, a: ['2.º', '2.º puesto'], b: ['', 'Ganador 3.º-6.º'] },
+      { k: 'f', x: 70, w: 30, y: 94, a: ['', 'Ganador semi 1'], b: ['', 'Ganador semi 2'] }
+    ],
+    lineas: ['31,81 35,81', '31,209 35,209', '66,64 68,64 68,111 70,111', '66,192 68,192 68,145 70,145'],
+    copa: { x: 70, w: 30, y: 190, desde: '85,162 85,190' }
+  };
+  var svg = '<svg viewBox="0 0 100 ' + L.alto + '" preserveAspectRatio="none" aria-hidden="true">' +
+    L.lineas.concat([L.copa.desde]).map(function (pts) {
+      return '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
+    }).join('') + '</svg>';
+  var html = '<div class="po-llave"><div class="po-lienzo" style="height:' + L.alto + 'px">' + svg;
+  L.cols.forEach(function (c) {
+    html += '<span class="po-col-tit" style="left:' + c[1] + '%;width:' + c[2] + '%">' + c[0] + '</span>';
+  });
+  L.m.forEach(function (m) {
+    var p = partidos[m.k] || {};
+    var casilla = function (lado, def) {
+      var nom = p[lado], cls = 'po-s' + (nom ? '' : ' vacio') + (p.gana === lado ? ' gana' : p.gana ? ' pierde' : '');
+      var tx = nom ? (def[0] ? '<i>' + def[0] + '</i>' : '') + '<span class="po-n">' + esc_(apellidosPareja_(nom)) + '</span>' : '<span class="po-n">' + esc_(def[1]) + '</span>';
+      return '<div class="' + cls + '"' + (nom ? ' title="' + esc_(nom) + '"' : '') + '>' + tx + '</div>';
+    };
+    html += '<div class="po-m" style="left:' + m.x + '%;width:' + m.w + '%;top:' + m.y + 'px">' + casilla('a', m.a) + casilla('b', m.b) + '</div>';
+  });
+  var fin = partidos.f || {}, campeon = (fin.gana === 'a' || fin.gana === 'b') ? fin[fin.gana] : '';
+  html += '<div class="po-copa' + (campeon ? ' lleno' : '') + '" style="left:' + L.copa.x + '%;width:' + L.copa.w + '%;top:' + L.copa.y + 'px">🏆 ' + esc_(campeon ? apellidosPareja_(campeon) : 'Campeón') + '</div>';
+  html += '</div><p class="po-ayuda">' + (formato === 4 ? 'Juegan las 4 mejores de la tabla.' : 'Juegan los 6 mejores de la tabla. 1.º y 2.º esperan en semis.') + ' El que gana avanza por la línea.</p></div>';
+  return html;
 }
 function pintarFormatoPlayoffs_(formato) {
   var t = PLAYOFFS_FORMATO_TX_[formato], el = document.getElementById('playoffs-formato');
