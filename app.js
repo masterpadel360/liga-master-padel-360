@@ -819,16 +819,19 @@ function playoffsTieneNombres_(c) {
 function renderPlayoffs_() {
   var d = playoffsDatos_, cuadro = document.getElementById('playoffs-cuadro');
   var vacio = document.getElementById('playoffs-vacio');
-  var cats = Object.keys((d && d.cats) || {}).filter(function (c) { return playoffsTieneNombres_(d.cats[c]); });
-  var orden = CATEGORIAS && CATEGORIAS.length ? CATEGORIAS : [];
-  cats.sort(function (x, y) { return (orden.indexOf(x) + 1 || 99) - (orden.indexOf(y) + 1 || 99); });
+  // Se muestran todas las categorías, aunque todavía no tengan nombres:
+  // la llave vacía ya dice quién va en cada lugar (1.º, 2.º, ganador de…).
+  var guardadas = (d && d.cats) || {};
+  var cats = (CATEGORIAS || []).slice();
+  Object.keys(guardadas).forEach(function (c) { if (cats.indexOf(c) === -1 && playoffsTieneNombres_(guardadas[c])) cats.push(c); });
   if (!cats.length) {
     cuadro.hidden = true; vacio.hidden = false;
     pintarFormatoPlayoffs_(6);
     return;
   }
   if (cats.indexOf(playoffsCat_) === -1) playoffsCat_ = cats.indexOf(categoriaActual) !== -1 ? categoriaActual : cats[0];
-  var cat = d.cats[playoffsCat_], formato = Number(cat.formato) === 4 ? 4 : 6;
+  var cat = guardadas[playoffsCat_] || { formato: /7ma fem/i.test(playoffsCat_) ? 4 : 6, partidos: {} };
+  var formato = Number(cat.formato) === 4 ? 4 : 6;
   var html = '';
   if (cats.length > 1) {
     html += '<div class="filter-chips po-chips">' + cats.map(function (c) {
@@ -837,7 +840,7 @@ function renderPlayoffs_() {
   } else {
     html += '<div class="po-cat-unica">' + esc_(playoffsCat_) + '</div>';
   }
-  if (d.aviso) html += '<p class="po-aviso">' + esc_(d.aviso) + '</p>';
+  if (d && d.aviso) html += '<p class="po-aviso">' + esc_(d.aviso) + '</p>';
   var fin = (cat.partidos || {}).f || {};
   if (fin.gana === 'a' || fin.gana === 'b') {
     html += '<div class="po-campeon"><span class="po-campeon-lbl">🏆 Campeones</span><b>' + esc_(fin[fin.gana]) + '</b></div>';
@@ -848,7 +851,8 @@ function renderPlayoffs_() {
       var p = (cat.partidos || {})[def.k] || {};
       var fila = function (lado, sem) {
         var nom = p[lado], cls = 'po-fila' + (p.gana === lado ? ' gana' : p.gana ? ' pierde' : '');
-        return '<div class="' + cls + '"><span class="po-seed">' + esc_(sem) + '</span><span class="po-nom' + (nom ? '' : ' po-tbd') + '">' + esc_(nom || 'A definir') + '</span>' + (p.gana === lado ? '<span class="po-check">✓</span>' : '') + '</div>';
+        var lugar = /^\d°$/.test(sem) ? sem.replace('°', '.º') + ' de la tabla' : sem.replace('Ganador ', 'Ganador de ').replace(/(\d)°\/(\d)°/, '$1.º vs $2.º');
+        return '<div class="' + cls + '">' + (nom ? '<span class="po-seed">' + esc_(sem) + '</span>' : '') + '<span class="po-nom' + (nom ? '' : ' po-tbd') + '">' + esc_(nom || lugar) + '</span>' + (p.gana === lado ? '<span class="po-check">✓</span>' : '') + '</div>';
       };
       html += '<div class="po-partido">' + fila('a', def.a) + fila('b', def.b) +
         ((p.res || p.cuando) ? '<div class="po-pie">' + (p.res ? '<span class="po-res">' + esc_(p.res) + '</span>' : '') + (p.cuando ? '<span class="po-cuando">' + esc_(p.cuando) + '</span>' : '') + '</div>' : '') +
