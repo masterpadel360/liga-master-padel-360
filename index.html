@@ -31,7 +31,7 @@
 <meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261110a">
+<link rel="stylesheet" href="styles.css?v=20261124a">
 <link rel="stylesheet" href="organizador.css?v=20261110a">
 </head>
 <body>
@@ -251,7 +251,8 @@
         <h1>Playoffs</h1>
         <p>Fase final del torneo</p>
       </div>
-      <div class="bracket-card">
+      <div id="playoffs-cuadro" hidden></div>
+      <div class="bracket-card" id="playoffs-vacio">
         <svg viewBox="0 0 260 150" role="img" aria-label="Llave de playoffs a seis parejas, todavía bloqueada">
           <g stroke="var(--border)" stroke-width="1.5" fill="none">
             <line x1="16" y1="18" x2="60" y2="18"/><line x1="16" y1="42" x2="60" y2="42"/>
@@ -271,7 +272,7 @@
         <span class="soon-pill" id="playoffs-pill">Próximamente</span>
         <p class="bracket-caption" id="playoffs-mensaje">Se habilita cuando termine la fase de grupos de cada categoría.</p>
       </div>
-      <div class="reg-block">
+      <div class="reg-block" id="playoffs-formato">
         <b>Formato Top 6 (fase final)</b>
         <p>1° y 2° pasan directo a semifinales. 3° vs 6° y 4° vs 5° definen a los otros dos semifinalistas: 1° vs ganador 4°/5°, y 2° vs ganador 3°/6°. Todos los cruces son a partido único, y la final corona al campeón.</p>
       </div>
@@ -582,7 +583,7 @@
 </script>
 <script>window.APP_VERSION = '20261110a';</script>
 <script src="actualizar.js?v=20261110a"></script>
-<script src="app.js?v=20261110a"></script>
-<script src="organizador.js?v=20261110a"></script>
+<script src="app.js?v=20261124a"></script>
+<script src="organizador.js?v=20261124a"></script>
 </body>
 </html>

@@ -1031,9 +1031,7 @@
       vista().innerHTML =
         bloqueTextos('NOVEDAD', 'Novedades de Inicio', 'Los avisos que ven todos al entrar a la app.', novedades) +
         bloqueTextos('PREMIOS', 'Premios', 'Lo que se muestra en Más → Premios.', premios) +
-        '<div class="org-card"><h3>Playoffs</h3><p class="org-muted">Mensaje de la pantalla Más → Playoffs.</p>' +
-          '<textarea class="org-input" id="playoffsTx" rows="3">' + esc(d.playoffsMensaje) + '</textarea>' +
-          '<button class="rsv-btn-aprobar" data-org="guardar-playoffs" type="button">Guardar</button></div>' +
+        '<div class="org-card" id="orgPlayoffs"><h3>Playoffs</h3><p class="org-muted">Cargando…</p></div>' +
         '<div class="org-card"><h3>Sponsors</h3>' +
           d.sponsors.map(function (s) {
             return '<div class="org-item" data-sponsor=\'' + esc(JSON.stringify(s)) + '\'>' +
@@ -1064,7 +1062,78 @@
               '<button class="org-link org-danger" data-org="borrar-foto" data-id="' + f.id + '" type="button">✕</button></div>';
           }).join('') + '</div>' +
         '</div>';
+      cargarEditorPlayoffs(d.playoffsMensaje);
     }).catch(errorVista);
+  }
+
+  // ---------- Playoffs: llave por categoría (se guarda como JSON en playoffs_mensaje)
+  var PO_RONDAS = {
+    6: [['Cuartos', [['c1', '3°', '6°'], ['c2', '4°', '5°']]], ['Semis', [['s1', '1°', 'Gan. 4°/5°'], ['s2', '2°', 'Gan. 3°/6°']]], ['Final', [['f', 'Gan. semi 1', 'Gan. semi 2']]]],
+    4: [['Semis', [['s1', '1°', '4°'], ['s2', '2°', '3°']]], ['Final', [['f', 'Gan. semi 1', 'Gan. semi 2']]]]
+  };
+  function cargarEditorPlayoffs(tx) {
+    var o = null;
+    try { o = JSON.parse(tx); } catch (e) {}
+    st.po = o && o.playoffs ? o : { playoffs: 1, aviso: tx || '', cats: {} };
+    if (!st.po.cats) st.po.cats = {};
+    var g = genVista;
+    api('adminParejas').then(function (d) {
+      if (g !== genVista) return;
+      st.poCats = d.categorias;
+      st.poParejas = d.parejas.filter(function (p) { return p.estado === 'ACTIVA'; });
+      pintarEditorPlayoffs();
+    }).catch(function (err) { var c = $('#orgPlayoffs'); if (c) c.innerHTML = '<h3>Playoffs</h3><p class="state-empty">' + esc(err.message) + '</p>'; });
+  }
+  function poCat(nombre) {
+    var c = st.po.cats[nombre];
+    if (!c) c = st.po.cats[nombre] = { formato: /7ma fem/i.test(nombre) ? 4 : 6, partidos: {} };
+    if (!c.partidos) c.partidos = {};
+    return c;
+  }
+  function pintarEditorPlayoffs() {
+    var cont = $('#orgPlayoffs');
+    if (!cont) return;
+    var cats = st.poCats || [];
+    if (!st.catPo || cats.indexOf(st.catPo) === -1) st.catPo = cats[0];
+    var cat = poCat(st.catPo), formato = Number(cat.formato) === 4 ? 4 : 6;
+    var nombres = st.poParejas.filter(function (p) { return p.categoria === st.catPo; }).map(function (p) { return p.jugador1 + ' / ' + p.jugador2; });
+    cont.innerHTML = '<h3>Playoffs</h3><p class="org-muted">Lo que cargues acá se ve en Más → Playoffs. Si una categoría no tiene nombres, a los jugadores les sale "Próximamente".</p>' +
+      '<label class="org-muted">Aviso general (opcional)</label>' +
+      '<textarea class="org-input" id="poAviso" rows="2" placeholder="Ej.: Los playoffs se juegan el sábado 13/12">' + esc(st.po.aviso || '') + '</textarea>' +
+      '<div class="org-subtabs">' + cats.map(function (c) {
+        return '<button class="chip' + (c === st.catPo ? ' active' : '') + '" data-org-catpo="' + esc(c) + '" type="button">' + esc(c) + '</button>';
+      }).join('') + '</div>' +
+      '<select class="org-input" id="poFormato"><option value="6"' + (formato === 6 ? ' selected' : '') + '>Top 6 (cuartos 3-6 y 4-5, semis, final)</option><option value="4"' + (formato === 4 ? ' selected' : '') + '>Top 4 (semis 1-4 y 2-3, final)</option></select>' +
+      '<datalist id="poLista">' + nombres.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+      PO_RONDAS[formato].map(function (r) {
+        return '<h4>' + r[0] + '</h4>' + r[1].map(function (m) {
+          var p = cat.partidos[m[0]] || {};
+          return '<div class="org-subform" data-po-k="' + m[0] + '">' +
+            '<input class="org-input" data-po="a" list="poLista" placeholder="' + esc(m[1]) + '" value="' + esc(p.a || '') + '">' +
+            '<input class="org-input" data-po="b" list="poLista" placeholder="' + esc(m[2]) + '" value="' + esc(p.b || '') + '">' +
+            '<div class="org-grid2">' +
+              '<input class="org-input" data-po="cuando" placeholder="Día y hora (opcional)" value="' + esc(p.cuando || '') + '">' +
+              '<input class="org-input" data-po="res" placeholder="Resultado: 6-3 6-4" value="' + esc(p.res || '') + '">' +
+            '</div>' +
+            '<select class="org-input" data-po="gana"><option value="">Ganador: todavía no</option>' +
+              '<option value="a"' + (p.gana === 'a' ? ' selected' : '') + '>Ganó la de arriba (' + esc(m[1]) + ')</option>' +
+              '<option value="b"' + (p.gana === 'b' ? ' selected' : '') + '>Ganó la de abajo (' + esc(m[2]) + ')</option></select>' +
+          '</div>';
+        }).join('');
+      }).join('') +
+      '<button class="rsv-btn-aprobar org-btn-full" data-org="guardar-playoffs" type="button">Guardar playoffs</button>';
+  }
+  function leerEditorPlayoffs() {
+    var cont = $('#orgPlayoffs');
+    if (!cont || !st.po || !st.catPo) return;
+    st.po.aviso = $('#poAviso').value.trim();
+    var cat = poCat(st.catPo);
+    cat.formato = Number($('#poFormato').value) === 4 ? 4 : 6;
+    cont.querySelectorAll('[data-po-k]').forEach(function (b) {
+      var p = {};
+      b.querySelectorAll('[data-po]').forEach(function (i) { var v = i.value.trim(); if (v) p[i.getAttribute('data-po')] = v; });
+      cat.partidos[b.getAttribute('data-po-k')] = p;
+    });
   }
   function bloqueTextos(tipo, titulo, ayuda, items) {
     return '<div class="org-card" data-bloque-tipo="' + tipo + '"><h3>' + esc(titulo) + '</h3><p class="org-muted">' + esc(ayuda) + '</p>' +
@@ -1092,6 +1161,8 @@
     if (cr) { st.catResultados = cr.getAttribute('data-org-catres'); vResultados(); return; }
     var cp = e.target.closest('[data-org-catpar]');
     if (cp) { st.catParejas = cp.getAttribute('data-org-catpar'); st.editPareja = null; st.volverAtrasados = false; vParejas(); return; }
+    var cpo = e.target.closest('[data-org-catpo]');
+    if (cpo) { leerEditorPlayoffs(); st.catPo = cpo.getAttribute('data-org-catpo'); pintarEditorPlayoffs(); return; }
     var el = e.target.closest('[data-org]');
     if (!el) return;
     var a = el.getAttribute('data-org');
@@ -1352,7 +1423,8 @@
       conBoton(el, api('adminEliminarContenido', { id: el.closest('[data-cont-id]').getAttribute('data-cont-id') }), 'Eliminado').then(vContenido).catch(function () {});
     },
     'guardar-playoffs': function (el) {
-      conBoton(el, api('adminGuardarConfig', { valores: { playoffs_mensaje: $('#playoffsTx').value } }), 'Guardado').catch(function () {});
+      leerEditorPlayoffs();
+      conBoton(el, api('adminGuardarConfig', { valores: { playoffs_mensaje: JSON.stringify(st.po) } }), 'Playoffs guardados').catch(function () {});
     },
     'editar-sponsor': function (el) {
       var s = JSON.parse(el.closest('[data-sponsor]').getAttribute('data-sponsor'));
@@ -1390,6 +1462,7 @@
       lbl.classList.toggle('is-aviso', lib !== null && Number(canchas.value) > lib);
       return;
     }
+    if (t.id === 'poFormato') { leerEditorPlayoffs(); pintarEditorPlayoffs(); return; }
     if (t.hasAttribute('data-fej-cat')) {
       var cat = t.getAttribute('data-fej-cat');
       st.fixFechas = null;

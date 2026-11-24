@@ -789,8 +789,93 @@ function cargarMas_() {
 // pantalla de Reglamento ahora es el PDF oficial completo (ver
 // index.html), así que datos.reglamento no se usa acá. Se sigue
 // pidiendo igual porque esta misma llamada alimenta Playoffs y Premios.
+// Playoffs: el organizador carga la llave desde su panel y se guarda como
+// JSON en la config "playoffs_mensaje". Si ahí hay texto común (no JSON),
+// se muestra como mensaje, igual que antes.
+var PLAYOFFS_RONDAS_ = {
+  6: [
+    { ronda: 'Cuartos de final', partidos: [{ k: 'c1', a: '3°', b: '6°' }, { k: 'c2', a: '4°', b: '5°' }] },
+    { ronda: 'Semifinales', partidos: [{ k: 's1', a: '1°', b: 'Ganador 4°/5°' }, { k: 's2', a: '2°', b: 'Ganador 3°/6°' }] },
+    { ronda: 'Final', partidos: [{ k: 'f', a: 'Ganador semi 1', b: 'Ganador semi 2' }] }
+  ],
+  4: [
+    { ronda: 'Semifinales', partidos: [{ k: 's1', a: '1°', b: '4°' }, { k: 's2', a: '2°', b: '3°' }] },
+    { ronda: 'Final', partidos: [{ k: 'f', a: 'Ganador semi 1', b: 'Ganador semi 2' }] }
+  ]
+};
+var PLAYOFFS_FORMATO_TX_ = {
+  6: ['Formato Top 6 (fase final)', '1° y 2° pasan directo a semifinales. 3° vs 6° y 4° vs 5° definen a los otros dos semifinalistas: 1° vs ganador 4°/5°, y 2° vs ganador 3°/6°. Todos los cruces son a partido único, y la final corona al campeón.'],
+  4: ['Formato Top 4 (fase final)', 'Las 4 mejores pasan a semifinales: 1° vs 4° y 2° vs 3°. Todos los cruces son a partido único, y la final corona al campeón.']
+};
+var playoffsDatos_ = null, playoffsCat_ = null;
+function leerPlayoffs_(tx) {
+  try { var o = JSON.parse(tx); if (o && o.playoffs) return o; } catch (e) {}
+  return null;
+}
+function playoffsTieneNombres_(c) {
+  var p = (c && c.partidos) || {};
+  return Object.keys(p).some(function (k) { return p[k] && (p[k].a || p[k].b); });
+}
+function renderPlayoffs_() {
+  var d = playoffsDatos_, cuadro = document.getElementById('playoffs-cuadro');
+  var vacio = document.getElementById('playoffs-vacio');
+  var cats = Object.keys((d && d.cats) || {}).filter(function (c) { return playoffsTieneNombres_(d.cats[c]); });
+  var orden = CATEGORIAS && CATEGORIAS.length ? CATEGORIAS : [];
+  cats.sort(function (x, y) { return (orden.indexOf(x) + 1 || 99) - (orden.indexOf(y) + 1 || 99); });
+  if (!cats.length) {
+    cuadro.hidden = true; vacio.hidden = false;
+    pintarFormatoPlayoffs_(6);
+    return;
+  }
+  if (cats.indexOf(playoffsCat_) === -1) playoffsCat_ = cats.indexOf(categoriaActual) !== -1 ? categoriaActual : cats[0];
+  var cat = d.cats[playoffsCat_], formato = Number(cat.formato) === 4 ? 4 : 6;
+  var html = '';
+  if (cats.length > 1) {
+    html += '<div class="filter-chips po-chips">' + cats.map(function (c) {
+      return '<button class="chip' + (c === playoffsCat_ ? ' active' : '') + '" data-po-cat="' + esc_(c) + '">' + esc_(c) + '</button>';
+    }).join('') + '</div>';
+  } else {
+    html += '<div class="po-cat-unica">' + esc_(playoffsCat_) + '</div>';
+  }
+  if (d.aviso) html += '<p class="po-aviso">' + esc_(d.aviso) + '</p>';
+  var fin = (cat.partidos || {}).f || {};
+  if (fin.gana === 'a' || fin.gana === 'b') {
+    html += '<div class="po-campeon"><span class="po-campeon-lbl">🏆 Campeones</span><b>' + esc_(fin[fin.gana]) + '</b></div>';
+  }
+  PLAYOFFS_RONDAS_[formato].forEach(function (r) {
+    html += '<div class="po-ronda"><div class="fecha-block-label">' + r.ronda + '</div>';
+    r.partidos.forEach(function (def) {
+      var p = (cat.partidos || {})[def.k] || {};
+      var fila = function (lado, sem) {
+        var nom = p[lado], cls = 'po-fila' + (p.gana === lado ? ' gana' : p.gana ? ' pierde' : '');
+        return '<div class="' + cls + '"><span class="po-seed">' + esc_(sem) + '</span><span class="po-nom' + (nom ? '' : ' po-tbd') + '">' + esc_(nom || 'A definir') + '</span>' + (p.gana === lado ? '<span class="po-check">✓</span>' : '') + '</div>';
+      };
+      html += '<div class="po-partido">' + fila('a', def.a) + fila('b', def.b) +
+        ((p.res || p.cuando) ? '<div class="po-pie">' + (p.res ? '<span class="po-res">' + esc_(p.res) + '</span>' : '') + (p.cuando ? '<span class="po-cuando">' + esc_(p.cuando) + '</span>' : '') + '</div>' : '') +
+        '</div>';
+    });
+    html += '</div>';
+  });
+  cuadro.innerHTML = html;
+  cuadro.hidden = false; vacio.hidden = true;
+  pintarFormatoPlayoffs_(formato);
+  cuadro.onclick = function (e) {
+    var b = e.target.closest('[data-po-cat]');
+    if (b) { playoffsCat_ = b.getAttribute('data-po-cat'); renderPlayoffs_(); }
+  };
+}
+function pintarFormatoPlayoffs_(formato) {
+  var t = PLAYOFFS_FORMATO_TX_[formato], el = document.getElementById('playoffs-formato');
+  el.innerHTML = '<b>' + esc_(t[0]) + '</b><p>' + esc_(t[1]) + '</p>';
+}
 function renderMas_(datos) {
-  document.getElementById('playoffs-mensaje').textContent = datos.playoffsMensaje;
+  playoffsDatos_ = leerPlayoffs_(datos.playoffsMensaje);
+  if (playoffsDatos_) {
+    document.getElementById('playoffs-mensaje').textContent = playoffsDatos_.aviso || 'Se habilita cuando termine la fase de grupos de cada categoría.';
+  } else {
+    document.getElementById('playoffs-mensaje').textContent = datos.playoffsMensaje;
+  }
+  renderPlayoffs_();
 
   var premios = datos.premios.map(function (p) {
     return '<div class="reg-block"><b>' + esc_(p.titulo) + '</b><p>' + esc_(p.texto) + '</p></div>';

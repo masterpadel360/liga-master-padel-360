@@ -425,6 +425,29 @@ h1,h2{margin:0;font-family:'Barlow Condensed',sans-serif}
   font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:6px 14px;border-radius:999px;
 }
 .bracket-caption{text-align:center;font-size:.8rem;color:var(--text-dim);max-width:28ch;margin:0}
+#playoffs-cuadro{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
+#playoffs-cuadro[hidden]{display:none}
+.po-chips{margin:0}
+.po-cat-unica{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
+.po-aviso{margin:0;font-size:.82rem;color:var(--text-dim);line-height:1.45}
+.po-campeon{
+  background:var(--gold-dim);border:1px solid rgba(230,168,60,.55);border-radius:var(--radius-lg);
+  padding:16px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;
+}
+.po-campeon-lbl{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold)}
+.po-campeon b{font-size:1rem}
+.po-ronda{display:flex;flex-direction:column;gap:8px}
+.po-partido{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.po-fila{display:flex;align-items:center;gap:10px;padding:11px 13px}
+.po-fila + .po-fila{border-top:1px solid var(--border)}
+.po-seed{flex-shrink:0;width:62px;line-height:1.2;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint)}
+.po-nom{flex:1;min-width:0;font-size:.85rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-tbd{color:var(--text-faint);font-weight:600}
+.po-fila.pierde .po-nom{color:var(--text-dim);font-weight:600}
+.po-fila.gana .po-nom{color:var(--text)}
+.po-check{color:var(--gold);font-weight:800}
+.po-pie{display:flex;justify-content:space-between;gap:10px;padding:8px 13px;background:var(--surface-strong);font-size:.74rem;color:var(--text-dim)}
+.po-res{font-family:'IBM Plex Mono',monospace;color:var(--gold);font-weight:700}
 .reg-block{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;
 }
